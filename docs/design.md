@@ -74,12 +74,20 @@ regenerates it and runs the checks.
   one in stock.
   - TVP7002 stock is 2 (C3824085). That covers this board and nothing more.
 
+## Footprints (tools/fix_footprints.py, applied to the LCSC patterns)
+- TVP7002 exposed pad: SLES206C and its package addendum carry no land drawing. The OSSC builds
+  this chip in production with a 6.2 x 6.2 mm pad and a 7 x 7 grid of 0.33 mm vias at 0.8 mm
+  (marqs85/ossc_pcb, TQFP-100_thermal), so I used that pad and grid, with 0.30 mm drills. The
+  LCSC pattern had 5.445 mm and nine unnumbered vias.
+- FX3 BGA pads: 0.28 mm (11 mil, AN70707) instead of LCSC's 0.40 mm.
+- USB3-B shell pads renumbered SH to match the symbol.
+
+## Boot EEPROM
+AN76405 lists sizes from 32 Kb to 2048 Kb, 2-byte addressing only. Its Table 17 straps a
+24LC1025 as A2/A1/A0 = Vcc/0/0, which is how U3 is wired. A second 24LC1025 footprint (DNP,
+Vcc/0/1) holds a second 128 KB if the UVC firmware outgrows the first.
+
 ## Open before layout
-- TVP7002 PZP thermal pad: the LCSC pattern has a 5.445 mm pad. The datasheet text carries no
-  land drawing, so TI's PZP drawing is the reference.
-- FX3 BGA pads are 0.40 mm in the LCSC pattern; AN70707 recommends 11 mil (0.28 mm).
-- Which EEPROM sizes the FX3 I2C bootloader accepts (AN76405). The 24LC1025 assumes the UVC
-  firmware fits in 128 KB.
 - Stackup: AN70707 asks for at least 4 layers for 90 ohm pairs. JLC's 4-layer impedance
   stackups are the plan, with lengths matched to 5 mil (SS) and 20 mil (HS).
 

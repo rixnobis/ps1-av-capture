@@ -385,6 +385,10 @@ heading("fx3", "I2C: boot EEPROM and TVP7002 on one bus, 2k pull-ups to VIO5 (AN
 put("fx3", stk("Memory_EEPROM", "24LC1025"), "U", "24LC1025-I/SN", {
     1: "GND", 2: "GND", 3: "+3V3", 4: "GND", 5: "I2C_SDA", 6: "I2C_SCL", 7: "GND", 8: "+3V3"},
     "SOIC8", lcsc="C615697")
+put("fx3", stk("Memory_EEPROM", "24LC1025"), "U", "24LC1025-I/SN", {
+    1: "+3V3", 2: "GND", 3: "+3V3", 4: "GND", 5: "I2C_SDA", 6: "I2C_SCL", 7: "GND", 8: "+3V3"},
+    "SOIC8", lcsc="C615697", dnp=True,
+    note="Second 128 KB for a firmware image over 128 KB: AN76405 Table 17 device 2 (A2/A1/A0 = Vcc/0/1)")
 cap("fx3", "100n", "+3V3")
 res("fx3", "2k", "I2C_SCL", "+3V3")
 res("fx3", "2k", "I2C_SDA", "+3V3")
