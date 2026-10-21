@@ -1,0 +1,4 @@
+(fp_lib_table
+  (version 7)
+  (lib (name "ps1-av-capture")(type "KiCad")(uri "${KIPRJMOD}/lib/av.pretty")(options "")(descr "LCSC land patterns via easyeda2kicad"))
+)

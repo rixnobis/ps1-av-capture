@@ -1,0 +1,12 @@
+{
+  "meta": {
+    "filename": "ps1-av-capture.kicad_pro",
+    "version": 3
+  },
+  "erc": {
+    "rule_severities": {
+      "lib_symbol_issues": "ignore",
+      "lib_symbol_mismatch": "ignore"
+    }
+  }
+}
