@@ -64,7 +64,7 @@ FIXED_TVP = "U1"
 ANCHOR_SKIP = {"GND"}          # nets never used to decide where a part goes
 EDGE = 1.0                     # keep parts this far inside the outline
 PREFER = {"75": "J1"}          # value -> host: video terminations sit at the input connector
-GAP = 0.25                     # clearance between part outlines when packing
+GAP = 0.5                      # clearance between part outlines: leaves a routing channel
 # Escape ring kept clear around the fine-pitch ICs: a first Freerouting pass with passives packed
 # 0.25 mm from the bodies escaped only 499 of 802 SMD pins.
 RING = {"U1": 1.5, "U2": 1.5}

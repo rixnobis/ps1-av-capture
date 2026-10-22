@@ -19,8 +19,10 @@ SES = ROOT / "build" / "ps1-av-capture.ses"
 
 def export():
     board = pcbnew.LoadBoard(str(PCB))
-    for layer in (pcbnew.In1_Cu, pcbnew.In2_Cu):
-        board.SetLayerType(layer, pcbnew.LT_POWER)
+    # L2 is the solid GND plane. L3 carries the supply pours AND signals: two signal layers
+    # stalled Freerouting at 89-131 unrouted. A rule area keeps tracks off L3 under the USB
+    # corridor, where L3 is the D+/D- reference (route_usb.py).
+    board.SetLayerType(pcbnew.In1_Cu, pcbnew.LT_POWER)
     board.Save(str(PCB))
     assert pcbnew.ExportSpecctraDSN(board, str(DSN)), "DSN export failed"
     print("dsn", DSN.stat().st_size, "bytes")

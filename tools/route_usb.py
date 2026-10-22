@@ -48,6 +48,7 @@ VIAS = [("USB3_DM", 53.6, 56.55, 0.6, 0.3), ("USB3_DP", 52.7, 58.45, 0.6, 0.3),
 # its buck, and GND under the USB corridor and receptacle so the D+/D- run on L4 has a ground
 # reference and its return vias land on ground (AN70707 p.26). Other rails are routed tracks.
 BOARD = ((0.5, 0.5), (99.5, 0.5), (99.5, 79.5), (0.5, 79.5))
+GND_ISLAND = ((50.0, 55.5), (72.0, 55.5), (72.0, 79.5), (50.0, 79.5))
 PLANES = [
     (pcbnew.In1_Cu, "GND", 0, BOARD),
     (pcbnew.In2_Cu, "+3V3", 0, BOARD),
@@ -55,7 +56,7 @@ PLANES = [
     # 2V5 bucks stay on the +3V3 region so their outputs can reach it.
     (pcbnew.In2_Cu, "+1V2", 1, ((56.0, 40.0), (76.0, 40.0), (76.0, 63.0), (92.0, 63.0),
                                 (92.0, 73.0), (72.0, 73.0), (72.0, 55.4), (56.0, 55.4))),
-    (pcbnew.In2_Cu, "GND", 2, ((50.0, 55.5), (72.0, 55.5), (72.0, 79.5), (50.0, 79.5))),
+    (pcbnew.In2_Cu, "GND", 2, GND_ISLAND),
 ]
 # Bump: (net, segment index in its first path, side +1 right/-1 left) used to stretch the
 # shorter member of each pair.
@@ -159,6 +160,18 @@ def main():
         for x, y in poly:
             ol.Append(pcbnew.FromMM(OX + x), pcbnew.FromMM(OY + y))
         board.Add(zone)
+    keep = pcbnew.ZONE(board)                 # no tracks on L3 over the GND island
+    keep.SetIsRuleArea(True)
+    keep.SetLayer(pcbnew.In2_Cu)
+    keep.SetDoNotAllowTracks(True)
+    keep.SetDoNotAllowVias(False)
+    keep.SetDoNotAllowPads(False)
+    keep.SetDoNotAllowZoneFills(False)
+    ol = keep.Outline()
+    ol.NewOutline()
+    for x, y in GND_ISLAND:
+        ol.Append(pcbnew.FromMM(OX + x), pcbnew.FromMM(OY + y))
+    board.Add(keep)
     pcbnew.ZONE_FILLER(board).Fill(board.Zones())
     board.Save(str(PCB))
     for n_nets, p_nets, tol in PAIRS:
