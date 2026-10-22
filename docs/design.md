@@ -125,8 +125,7 @@ Build notes:
   stackups are the plan, with lengths matched to 5 mil (SS) and 20 mil (HS).
 
 ## Collaboration decision
-I'm asking Pixel how he would take sync on the 15 kHz path. That is a question, not a task.
-My default is the TVP7002's own SOG slicer on composite. The alternative is a sync separator
-(LM1881 class) into HSYNC_A. He has run PS1 RGB through real gear, and that is the one
-front-end call where his experience beats my reading of the datasheet. The question is on the
-card with a default and a date.
+Sync on the 15 kHz path was the one front-end call put to Pixel, because he has run PS1 RGB
+through real gear. His answer was to keep the BoM small, so the board uses the TVP7002's own SOG
+slicer on composite (SOGIN_2) or S-Video Y (SOGIN_3), selected by register. There is no
+LM1881-class separator.
