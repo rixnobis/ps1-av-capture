@@ -48,9 +48,19 @@ HAND = {
     "SW1": (80.0, 12.0, 0),
     "D3": (70.0, 4.0, 0), "D6": (75.0, 4.0, 0),      # status RGB + power LED on the top edge
 }
+# USB 3 corridor between U2's row A and J2 (tools/route_usb.py routes it). SS TX caps under the TX
+# balls, the 4-channel ESD flow-through across all four SS lines, the D+/D- ESD to the left.
+HAND.update({
+    "C77": (61.9, 56.6, 270),     # USB3_TXN_C -> USB3_TXN, pad 1 up; 1.0 mm apart clears courtyards
+    "C78": (62.9, 56.6, 270),     # USB3_TXP_C -> USB3_TXP
+    "D4": (63.0, 59.5, 90),       # pads 1..5 left to right: TXN TXP GND RXP RXN
+    "D5": (56.0, 57.5, 180),      # D- on the top row, D+ on the bottom row
+})
+KEEPOUT = [(52.0, 55.5, 70.0, 62.4)]   # nothing auto-placed in the corridor
 for i, (u, l) in enumerate(BUCKS):
     HAND[u] = (BUCK_X, BUCK_Y + i * BUCK_DY, 0)
     HAND[l] = (BUCK_X + 6.0, BUCK_Y + i * BUCK_DY, 0)
+FIXED_TVP = "U1"
 ANCHOR_SKIP = {"GND"}          # nets never used to decide where a part goes
 EDGE = 1.0                     # keep parts this far inside the outline
 PREFER = {"75": "J1"}          # value -> host: video terminations sit at the input connector
@@ -102,7 +112,7 @@ def write_project():
     ns["classes"] = [dict(base, name="Default", priority=2147483647, track_width=0.2),
                      dict(base, name="Power", priority=1, track_width=0.5),
                      # 90 ohm on JLC04161H-3313A L1/L2 per docs/stackup.md
-                     dict(base, name="USB", priority=0, track_width=0.25, clearance=0.2)]
+                     dict(base, name="USB", priority=0, track_width=0.25, clearance=0.15)]
     ns["netclass_patterns"] = ([{"netclass": "USB", "pattern": n} for n in DIFF_NETS] +
                                [{"netclass": "Power", "pattern": n} for n in POWER_NETS])
     ns["netclass_assignments"] = {}
@@ -267,7 +277,7 @@ def place_rest(board, comps, pads):
                 bx = fp_box(fp, GAP)
                 if bx[0] < EDGE or bx[1] < EDGE or bx[2] > W - EDGE or bx[3] > H - EDGE:
                     continue
-                if any(overlaps(bx, o) for o in boxes.values()):
+                if any(overlaps(bx, o) for o in list(boxes.values()) + KEEPOUT):
                     continue
                 best = bx
                 break
@@ -319,6 +329,9 @@ def place():
             net = pads.get((ref, pad.GetNumber()))
             if net:
                 pad.SetNet(nets[net])
+            if ref == FIXED_TVP and pad.GetAttribute() == pcbnew.PAD_ATTRIB_PTH:
+                # thermal-pad via grid joins the GND plane solid; spokes starve at 0.8 mm pitch
+                pad.SetLocalZoneConnection(pcbnew.ZONE_CONNECTION_FULL)
     check_orientation(board)
     place_rest(board, comps, pads)
     outline(board)

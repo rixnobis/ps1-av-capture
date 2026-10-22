@@ -435,16 +435,19 @@ cap("fx3", "1u", "VBUS")
 cap("fx3", "100n", "VBUS")
 
 # ================================================================ power sheet
-heading("power", "USB 3 Standard-B (FX3). SS TX AC-coupled with 100 nF at the connector (AN70707 p.22, "
-        "p.40). ESD at the connector. Shield to GND through 100k || 2.2 nF (AN70707 Figure 35).")
+heading("power", "USB 3 Standard-B (FX3). SS TX AC-coupled with 100 nF (placement: docs/design.md). "
+        "ESD on the receptacle side of the caps. Shield to GND through 100k || 2.2 nF (AN70707 Figure 35). "
+        "SS RX is wired P-to-N (FX3 SSRXP to receptacle SSRX-), which AN70707 p.22 allows, so the "
+        "pair reaches the receptacle without crossing.")
 put("power", stk("Connector", "USB3_B"), "J", "USB3_B", {
     1: "VBUS", 2: "USB3_DM", 3: "USB3_DP", 4: "GND", 5: "USB3_TXN", 6: "USB3_TXP", 7: "GND",
-    8: "USB3_RXN", 9: "USB3_RXP", "SH": "USB3_SHIELD"}, "USB3B", lcsc="C7501849", ref="J2")
+    8: "USB3_RXP", 9: "USB3_RXN", "SH": "USB3_SHIELD"}, "USB3B", lcsc="C7501849", ref="J2")
 cap("power", "100n", "USB3_TXN_C", "USB3_TXN")
 cap("power", "100n", "USB3_TXP_C", "USB3_TXP")
 put("power", stk("Power_Protection", "TPD4E05U06DQA"), "D", "TPD4E05U06DQAR",
-    {1: "USB3_TXP", 2: "USB3_TXN", 4: "USB3_RXP", 5: "USB3_RXN", 3: "GND", 8: "GND",
-     6: None, 7: None, 9: None, 10: None}, "USON10", lcsc="C138714")
+    {1: "USB3_TXN", 2: "USB3_TXP", 4: "USB3_RXP", 5: "USB3_RXN", 3: "GND", 8: "GND",
+     10: "USB3_TXN", 9: "USB3_TXP", 7: "USB3_RXP", 6: "USB3_RXN"}, "USON10", lcsc="C138714",
+    note="Flow-through: each channel's NC pad opposite (10/9/7/6) carries the same net, so the trace runs straight under the part")
 put("power", stk("Power_Protection", "USBLC6-2SC6"), "D", "USBLC6-2SC6",
     {1: "USB3_DP", 6: "USB3_DP", 3: "USB3_DM", 4: "USB3_DM", 2: "GND", 5: "VBUS"}, "SOT23-6", lcsc="C7519")
 res("power", "100k", "USB3_SHIELD", "GND")

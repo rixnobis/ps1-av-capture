@@ -32,12 +32,31 @@ regenerates it and runs the checks.
 - Decoupling follows AN70707 Table 3. AVDD, U3TXVDDQ, U3RXVDDQ and CVDDQ each sit behind a
   ferrite, and each USB 3 supply has 22 uF (datasheet). All VIO are 3.3 V.
 - USB 3 Standard-B connector:
-  - SS TX has 100 nF coupling at the connector. AN70707 says both "near the connector" and
-    "near the FX3"; p.22 and p.40 describe exactly this host-to-device case, so I follow them.
-  - ESD at the connector.
+  - SS TX has 100 nF coupling caps (C77/C78) directly under the FX3's TX balls, 2.6 mm from the
+    balls and about 7 mm from the receptacle. AN70707 says both "near the connector" and "near
+    the FX3"; the whole TX path is 12.6 mm, so the choice moves the caps by less than 10 mm of
+    trace, and under the balls is where both pairs and the ESD part fit.
+  - ESD: one TPD4E05U06 (D4) flow-through across all four SS lines, 4.5 mm from the receptacle pins,
+    on the receptacle side of the TX caps. D+/D- have a USBLC6 (D5).
+  - SS RX is wired P-to-N (FX3 SSRXP to receptacle SSRX-, AN70707 p.22 allows it), so the RX
+    pair reaches the receptacle without crossing.
   - The shield goes to GND through 100k || 2.2 nF.
 - VBUS and VBATT both go to the connector's VBUS. AN70707 never says whether VBATT may float,
   so this is my choice.
+
+### USB routing (tools/route_usb.py)
+Placed and routed by hand geometry between U2's row A and J2, 45-degree bends only, 0.25/0.15 mm.
+The script reports every length; current skew is 0.000 mm on TX, RX and D+/D- (limits 5 mil for
+SS, 20 mil for HS, AN70707 p.25), and DRC shows no clearance errors on these nets.
+- SS TX and RX stay on L1 over the L2 ground plane, no vias. They land on the receptacle's
+  through-hole pins from the top. AN70707 p.28-30 prefers entering those pins from the opposite
+  layer to avoid the 1.6 mm pin stub; I kept the pairs on L1 to avoid two vias per line instead.
+- D+/D- leave the FX3 on L1 (the TX pair crosses them), pass through D5, and drop to L4 for the
+  run to the receptacle, with a GND via within 1 mm of each signal via (AN70707 p.26). The D-
+  length is made up by two 45-degree bumps on L4.
+- Open: L4 is referenced to L3, the power plane. The L3 region under the corridor and the
+  receptacle becomes GND when the power planes are drawn; until then the two return vias show
+  as dangling in DRC.
 
 ### FX3 GPIO budget and the status LED
 Used: GPIO[0..15] and [33..40] (DQ[23:0]), [16] PCLK, [17..20] CTL[0..3] (HS/VS/FID/SOG),
