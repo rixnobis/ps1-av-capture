@@ -48,6 +48,16 @@ HAND = {
     "SW1": (80.0, 12.0, 0),
     "D3": (70.0, 4.0, 0), "D6": (75.0, 4.0, 0),      # status RGB + power LED on the top edge
 }
+# 22R series terminations at the TVP7002's outputs, keyed by the TVP-side net (pad 1). They sit
+# just outside U1's escape ring in pin order, so each bus fans out on L1 with no crossings:
+# B/G and DATACLK in a row under the south pins, R in a column right of the east pins, the
+# syncs in a column left of the west pins. Pad 2 (the VD_* side) faces away from U1.
+SERIES = {"TVP_DATACLK": (26.6, 37.2, -90)}  # 1.05 pitch: 0402 courtyards are 1.03 wide
+SERIES.update({f"TVP_B{9 - i}": (26.6 + 1.05 * (1 + i), 37.2, -90) for i in range(8)})
+SERIES.update({f"TVP_G{9 - i}": (26.6 + 1.05 * (9 + i), 37.2, -90) for i in range(8)})
+SERIES.update({f"TVP_R{2 + i}": (44.2, 24.15 + 1.1 * i, 0) for i in range(8)})
+SERIES.update({n: (22.6, 29.6 + 1.1 * i, 180) for i, n in
+               enumerate(("TVP_FIDOUT", "TVP_VSOUT", "TVP_HSOUT", "TVP_SOGOUT"))})
 # USB 3 corridor between U2's row A and J2 (tools/route_usb.py routes it). SS TX caps under the TX
 # balls, the 4-channel ESD flow-through across all four SS lines, the D+/D- ESD to the left.
 HAND.update({
@@ -304,6 +314,12 @@ def place():
         refs = [r for r, c in comps.items() if c["part"] == part]
         assert len(refs) == 1, (part, refs)
         FIXED[refs[0]] = FIXED.pop(part)
+    for ref, c in comps.items():
+        net = pads.get((ref, "1"))
+        if c["value"] == "22" and net in SERIES:
+            assert pads.get((ref, "2"), "").startswith("VD_"), (ref, net)
+            HAND[ref] = SERIES[net]
+    assert sum(1 for v in HAND.values() if v in SERIES.values()) == len(SERIES), "series R missing"
     board = pcbnew.NewBoard(str(PCB))
     board.SetCopperLayerCount(4)
     nets = {}
