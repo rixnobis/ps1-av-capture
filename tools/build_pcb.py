@@ -28,7 +28,7 @@ W, H = 100.0, 80.0              # board size
 
 # Hand placement: ref -> (x, y, angle). Angles are asserted below against pad positions.
 FIXED = {
-    "J1": (4.0, 12.0, 0),        # AV multi-out header, pin 1 at top, left edge
+    "J1": (6.0, 12.0, 270),      # AV pigtail JST PHD 2x7: pin 1 at top, grounds (even) on the edge side, signals face U1
     "U1": (33.0, 26.0, 270),     # TVP7002: pins 1-25 face J1, data pins face U2
     "U2": (62.0, 50.0, 180),     # FX3: row A (USB) at the bottom, GPIF towards U1
     "J2": (62.0, 67.35, 0),      # USB3-B: body ends at +13.65 mm (mating face), flush with the bottom edge

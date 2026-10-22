@@ -38,7 +38,7 @@ FP = {
     "USON10": "Package_SON:USON-10_2.5x1.0mm_P0.5mm",
     "LED0603": "LED_SMD:LED_0603_1608Metric",
     "JTAG": "Connector_PinHeader_1.27mm:PinHeader_2x05_P1.27mm_Vertical_SMD",
-    "HDR13": "Connector_PinHeader_2.54mm:PinHeader_1x13_P2.54mm_Vertical",
+    "PHD14": "Connector_JST:JST_PHD_B14B-PHDSS_2x07_P2.00mm_Vertical",
     "HDR3": "Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical",
     "HDR2": "Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical",
     "SW": "Button_Switch_SMD:SW_SPST_TL3342",
@@ -224,12 +224,12 @@ def bead(sheet, a, b):
 
 
 # ================================================================ input sheet
-heading("input", "PS1 AV multi-out (psx-spx pinout). Pin 3 (+5V) is not taken: the board is "
-        "powered from USB. Pin 6 (S-Video C) is not used.")
-put("input", stk("Connector_Generic", "Conn_01x13"), "J", "AV_MULTI_OUT", {
-    1: "VIN_G", 2: "VIN_R", 3: None, 4: "VIN_B", 5: "GND", 6: None, 7: "VIN_CVBS", 8: "VIN_Y",
-    9: "AIN_L", 10: "GND", 11: "AIN_R", 12: "GND", 13: "GND"}, "HDR13", ref="J1",
-    note="Pins 1-12 = multi-out pins 1-12, pin 13 = shield")
+heading("input", "PS1 AV multi-out via a short pigtail to a multi-AV male plug (pinout in "
+        "docs/design.md). Multi-out +5V (pin 3) and S-Video C (pin 6) are not carried.")
+put("input", stk("Connector_Generic", "Conn_02x07_Odd_Even"), "J", "AV_PIGTAIL", {
+    1: "VIN_R", 2: "GND", 3: "VIN_G", 4: "GND", 5: "VIN_B", 6: "GND", 7: "VIN_Y", 8: "GND",
+    9: "VIN_CVBS", 10: "GND", 11: "AIN_L", 12: "GND", 13: "AIN_R", 14: "GND"}, "PHD14", ref="J1",
+    lcsc="C471471", dnp=True, note="Hand-soldered, not in the JLC assembly. JST PHD 2x7 (B14B-PHDSS), keyed and latching; each signal pairs with the ground beside it")
 heading("input", "75 ohm termination at the connector, then ESD, then AC coupling (TVP7002: 0.1 uF; "
         "SOG inputs: 1 nF). CVBS and Y also reach spare ADC inputs, so luma can be digitised.")
 for n in ("R", "G", "B", "CVBS", "Y"):

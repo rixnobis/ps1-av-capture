@@ -22,3 +22,13 @@ goes on a board.
 
 The single-channel board carries no hub: the FX3 and the PCM2903C each get their own
 USB connector.
+
+## Hand-built items (not in the JLC BOM)
+
+| Item | Part | Source | Notes |
+|---|---|---|---|
+| J1, AV header | JST B14B-PHDSS, 2x7 2.0 mm THT | LCSC C471471 (17667 in stock 2026-10-22) | hand-solder after assembly |
+| Pigtail housing | JST PHDR-14VS | LCSC, DigiKey or Mouser | mates J1, latching |
+| Pigtail contacts | JST SPHD-002T-P0.5, 24-28 AWG | LCSC, DigiKey or Mouser | 14 per pigtail, crimped |
+| Console plug | DIY PS1/PS2 multi-AV male plug kit (shell + contact block + housing) | AliExpress, about $0.65 a set | wiring in docs/design.md |
+| Cable | 7 twisted pairs, 26-28 AWG, 15-20 cm | any | one signal + one ground per pair |

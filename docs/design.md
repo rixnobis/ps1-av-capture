@@ -87,6 +87,39 @@ AN76405 lists sizes from 32 Kb to 2048 Kb, 2-byte addressing only. Its Table 17 
 24LC1025 as A2/A1/A0 = Vcc/0/0, which is how U3 is wired. A second 24LC1025 footprint (DNP,
 Vcc/0/1) holds a second 128 KB if the UVC firmware outgrows the first.
 
+## AV input: J1 and the pigtail
+J1 is a JST PHD 2x7 header (B14B-PHDSS, 2.0 mm, LCSC C471471): through-hole, keyed shroud,
+latching cable housing. It is DNP in the JLC assembly and hand-soldered. The 75R terminations,
+the TPD4E05U06 clamps and the coupling caps sit beside it, so the pigtail is the only part of the
+input that is not on the board. Each signal shares a column with a ground, so the pigtail is seven
+twisted signal/ground pairs; keep it short (15-20 cm).
+
+Pigtail, J1 pin -> PS1 multi-AV male plug pin (multi-out pinout per psx-spx, "AV Multi Out"):
+
+| J1 | Signal | Multi-AV pin |
+|---|---|---|
+| 1 | Red | 2 |
+| 3 | Green | 1 |
+| 5 | Blue | 4 |
+| 7 | S-Video Y (luma) | 8 |
+| 9 | Composite | 7 |
+| 11 | Audio left | 9 |
+| 13 | Audio right | 11 |
+| 2, 4, 6, 8, 10 | video grounds | 5, and the plug shell where the kit has a metal one (psx-spx: shield = video ground) |
+| 12 | audio left ground | 10 |
+| 14 | audio right ground | 12 |
+
+Multi-out pin 3 (+5 V) and pin 6 (S-Video C) are left empty in the plug. psx-spx numbers the
+console socket 12..1 left to right seen from the rear; the plug is its mirror, so check each
+cavity against the socket before soldering.
+
+Build notes:
+1. JLC assembles everything except J1.
+2. Hand-solder J1 from the top, shroud key matching the silkscreen outline.
+3. Crimp the PHDR-14VS housing with SPHD contacts (24-28 AWG), solder the other ends into the
+   multi-AV plug kit per the table, and continuity-check every pin plus pin-to-pin shorts
+   before it goes near a console.
+
 ## Open before layout
 - Stackup: AN70707 asks for at least 4 layers for 90 ohm pairs. JLC's 4-layer impedance
   stackups are the plan, with lengths matched to 5 mil (SS) and 20 mil (HS).
