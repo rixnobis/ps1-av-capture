@@ -36,6 +36,25 @@ FIXED = {
     "J3": (22.0, 74.0, 0),       # USB-C (audio) at the bottom edge
     "PCM2903C": (22.0, 60.0, 0), # keyed by part; resolved to its reference in place()
 }
+# Second tier, also by hand: the power block on the right edge (one buck template repeated,
+# VBUS comes up from J2), the TVP7002's LDOs above U1, and the debug/boot parts top right.
+BUCKS = [("U5", "L1"), ("U6", "L2"), ("U7", "L3")]   # 3V3, 2V5, 1V2
+BUCK_X, BUCK_Y, BUCK_DY = 80.0, 49.0, 9.5
+HAND = {
+    "U8": (46.0, 9.0, 0), "U9": (52.0, 9.0, 0),      # 2V5 -> 1V9A / 1V9D LDOs, above U1
+    "U10": (20.0, 9.0, 0),                           # VBUS -> 3V3A LDO, above U1's analog side
+    "U3": (78.0, 30.0, 0), "U4": (78.0, 38.0, 0),    # boot EEPROM + DNP spare
+    "J4": (90.0, 13.0, 0), "J5": (90.0, 25.0, 0), "JP1": (90.0, 35.0, 0),   # JTAG, UART, USB boot
+    "SW1": (80.0, 12.0, 0),
+    "D3": (70.0, 4.0, 0), "D6": (75.0, 4.0, 0),      # status RGB + power LED on the top edge
+}
+for i, (u, l) in enumerate(BUCKS):
+    HAND[u] = (BUCK_X, BUCK_Y + i * BUCK_DY, 0)
+    HAND[l] = (BUCK_X + 6.0, BUCK_Y + i * BUCK_DY, 0)
+ANCHOR_SKIP = {"GND"}          # nets never used to decide where a part goes
+EDGE = 1.0                     # keep parts this far inside the outline
+PREFER = {"75": "J1"}          # value -> host: video terminations sit at the input connector
+GAP = 0.25                     # clearance between part outlines when packing
 DIFF_NETS = ["USB3_TXP*", "USB3_TXN*", "USB3_RXP", "USB3_RXN", "USB3_DP", "USB3_DM",
              "AUD_DP*", "AUD_DM*"]
 POWER_NETS = ["GND", "VBUS", "VBUS_AUD", "+3V3*", "+2V5", "+1V2", "+1V9*", "TVP_AVDD",
@@ -62,7 +81,8 @@ def netlist():
         dnp = any(p.get("name") == "dnp" for p in c.findall("property"))
         comps[c.get("ref")] = {"value": c.findtext("value"), "footprint": c.findtext("footprint"),
                                "uuid": c.findtext("tstamps"), "fields": fields, "dnp": dnp,
-                               "part": c.find("libsource").get("part")}
+                               "part": c.find("libsource").get("part"),
+                               "sheet": c.find("sheetpath").get("names")}
     pads = {}
     for n in r.find("nets"):
         for node in n:
@@ -152,6 +172,114 @@ def check_orientation(board):
     print("orientation ok: U1 pin13", p13, "pin38", p38, "pin60", p60, "| U2 A4", a4, "F10", f10)
 
 
+def fp_box(fp, margin=0.0):
+    """Outline of a footprint from its pads and fab/courtyard graphics, in board mm."""
+    xs, ys = [], []
+    for p in fp.Pads():
+        bb = p.GetBoundingBox()
+        xs += [bb.GetLeft(), bb.GetRight()]
+        ys += [bb.GetTop(), bb.GetBottom()]
+    for g in fp.GraphicalItems():
+        if g.GetLayer() in (pcbnew.F_CrtYd, pcbnew.F_Fab, pcbnew.B_CrtYd) and g.GetClass() != "PCB_TEXT":
+            bb = g.GetBoundingBox()
+            xs += [bb.GetLeft(), bb.GetRight()]
+            ys += [bb.GetTop(), bb.GetBottom()]
+    f = lambda v, o: pcbnew.ToMM(v) - o  # noqa: E731
+    return (min(f(x, OX) for x in xs) - margin, min(f(y, OY) for y in ys) - margin,
+            max(f(x, OX) for x in xs) + margin, max(f(y, OY) for y in ys) + margin)
+
+
+def overlaps(a, b):
+    return a[0] < b[2] and b[0] < a[2] and a[1] < b[3] and b[1] < a[3]
+
+
+def place_rest(board, comps, pads):
+    """Hand tier (HAND), then every other part next to the pad it serves.
+
+    A part's anchor is the pad of an already-placed part on the net it shares with the fewest
+    other pads, GND excluded. A decoupling cap (rail + GND) goes to the rail pin of that IC with
+    the fewest caps so far, so caps spread over the rail's pins instead of piling on one.
+    The part is pushed out from its anchor's footprint centre until it clears everything placed.
+    """
+    fps = {fp.GetReference(): fp for fp in board.GetFootprints()}
+    placed = set(FIXED)
+    for ref, (x, y, a) in HAND.items():
+        fps[ref].SetPosition(pt(x, y))
+        fps[ref].SetOrientationDegrees(a)
+        placed.add(ref)
+    boxes = {r: fp_box(fps[r], GAP) for r in placed}
+    fan = {}
+    for (r, _), n in pads.items():
+        fan[n] = fan.get(n, 0) + 1
+    caps_on = {}
+    rails = {n for n, k in fan.items() if k >= 6}     # multi-pin supply nets
+    todo = sorted(set(comps) - placed, key=lambda r: (r[0] in "RC", r))
+    stuck = 0
+    while todo and stuck < len(todo):
+        ref = todo.pop(0)
+        fp = fps[ref]
+        nets = [pads.get((ref, p.GetNumber())) for p in fp.Pads()]
+        nets = [n for n in nets if n and n not in ANCHOR_SKIP and not n.startswith("unconnected")]
+        decap = ref[0] == "C" and "GND" in [pads.get((ref, p.GetNumber())) for p in fp.Pads()]
+        cands = []
+        for n in nets:
+            for (r2, pin), n2 in pads.items():
+                if n2 == n and r2 != ref and r2 in placed:
+                    if decap and n in rails and not (r2[0] in "UL" and comps[r2]["sheet"] == comps[ref]["sheet"]):
+                        continue      # a rail cap decouples an IC on its own sheet, not a header
+                    cands.append((fan[n], caps_on.get((r2, pin), 0), r2, pin, n))
+        if not cands:
+            todo.append(ref)
+            stuck += 1
+            continue
+        stuck = 0
+        key = (lambda c: (c[1], c[0])) if decap else (lambda c: (c[0], c[1]))
+        pref = [c for c in cands if c[2] == PREFER.get(comps[ref]["value"])]
+        _, _, r2, pin, net = min(pref or cands, key=key)
+        caps_on[(r2, pin)] = caps_on.get((r2, pin), 0) + 1
+        ax, ay = padxy(board, r2, pin)
+        host = boxes[r2]
+        cx, cy = (host[0] + host[2]) / 2, (host[1] + host[3]) / 2
+        dx, dy = ax - cx, ay - cy
+        horiz = abs(dx) * (host[3] - host[1]) >= abs(dy) * (host[2] - host[0])
+        ux, uy = ((1 if dx >= 0 else -1), 0) if horiz else (0, (1 if dy >= 0 else -1))
+        fp.SetOrientationDegrees(0 if horiz else 90)
+        mine = [p for p in fp.Pads() if pads.get((ref, p.GetNumber())) == net]
+        if mine and len(list(fp.Pads())) == 2:
+            # pad on the anchor net faces the anchor
+            fp.SetPosition(pt(0, 0))
+            px = pcbnew.ToMM(mine[0].GetPosition().x) - OX
+            py = pcbnew.ToMM(mine[0].GetPosition().y) - OY
+            if (px * ux + py * uy) > 0:
+                fp.SetOrientationDegrees(fp.GetOrientationDegrees() + 180)
+        best = None
+        for step in range(0, 80):
+            d = step * 0.5
+            for lat in [0] + [s * k * 0.5 for k in range(1, 25) for s in (1, -1)]:
+                x = (host[2] if ux > 0 else host[0] if ux < 0 else ax + lat) if horiz else ax + lat
+                y = (host[3] if uy > 0 else host[1] if uy < 0 else ay + lat) if not horiz else ay + lat
+                fp.SetPosition(pt(x, y))
+                bx = fp_box(fp, GAP)
+                w2, h2 = (bx[2] - bx[0]) / 2, (bx[3] - bx[1]) / 2
+                x += ux * (w2 + d)
+                y += uy * (h2 + d)
+                fp.SetPosition(pt(x, y))
+                bx = fp_box(fp, GAP)
+                if bx[0] < EDGE or bx[1] < EDGE or bx[2] > W - EDGE or bx[3] > H - EDGE:
+                    continue
+                if any(overlaps(bx, o) for o in boxes.values()):
+                    continue
+                best = bx
+                break
+            if best:
+                break
+        assert best, ("no room for", ref, "near", r2, pin)
+        boxes[ref] = best
+        placed.add(ref)
+    assert not todo, ("parts with no placed neighbour", todo)
+    print("placed", len(placed) - len(FIXED) - len(HAND), "parts next to their anchors")
+
+
 def place():
     write_project()
     comps, pads = netlist()
@@ -192,9 +320,10 @@ def place():
             if net:
                 pad.SetNet(nets[net])
     check_orientation(board)
+    place_rest(board, comps, pads)
     outline(board)
     board.Save(str(PCB))
-    print("placed", len(FIXED), "fixed parts;", len(comps) - len(FIXED), "staged off-board")
+    print("fixed", len(FIXED), "hand", len(HAND))
 
 
 if __name__ == "__main__":
