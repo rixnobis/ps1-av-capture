@@ -293,8 +293,8 @@
         "schematic_color": "rgba(0, 0, 0, 0.000)",
         "track_width": 0.2,
         "tuning_profile": "",
-        "via_diameter": 0.6,
-        "via_drill": 0.3,
+        "via_diameter": 0.45,
+        "via_drill": 0.2,
         "wire_width": 6
       },
       {
@@ -312,8 +312,8 @@
         "schematic_color": "rgba(0, 0, 0, 0.000)",
         "track_width": 0.3,
         "tuning_profile": "",
-        "via_diameter": 0.6,
-        "via_drill": 0.3,
+        "via_diameter": 0.45,
+        "via_drill": 0.2,
         "wire_width": 6
       },
       {
@@ -331,8 +331,8 @@
         "schematic_color": "rgba(0, 0, 0, 0.000)",
         "track_width": 0.5,
         "tuning_profile": "",
-        "via_diameter": 0.6,
-        "via_drill": 0.3,
+        "via_diameter": 0.45,
+        "via_drill": 0.2,
         "wire_width": 6
       },
       {
@@ -350,8 +350,8 @@
         "schematic_color": "rgba(0, 0, 0, 0.000)",
         "track_width": 0.25,
         "tuning_profile": "",
-        "via_diameter": 0.6,
-        "via_drill": 0.3,
+        "via_diameter": 0.45,
+        "via_drill": 0.2,
         "wire_width": 6
       }
     ],

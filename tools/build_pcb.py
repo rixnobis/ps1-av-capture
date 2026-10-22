@@ -65,6 +65,9 @@ ANCHOR_SKIP = {"GND"}          # nets never used to decide where a part goes
 EDGE = 1.0                     # keep parts this far inside the outline
 PREFER = {"75": "J1"}          # value -> host: video terminations sit at the input connector
 GAP = 0.25                     # clearance between part outlines when packing
+# Escape ring kept clear around the fine-pitch ICs: a first Freerouting pass with passives packed
+# 0.25 mm from the bodies escaped only 499 of 802 SMD pins.
+RING = {"U1": 1.5, "U2": 1.5}
 DIFF_NETS = ["USB3_TXP*", "USB3_TXN*", "USB3_RXP", "USB3_RXN", "USB3_DP", "USB3_DM",
              "AUD_DP*", "AUD_DM*"]
 POWER_NETS = ["VBUS", "VBUS_AUD", "+3V3*", "+2V5", "+1V2", "+1V9*", "TVP_AVDD",
@@ -108,7 +111,7 @@ def write_project():
     base = {"bus_width": 12, "clearance": 0.15, "diff_pair_gap": 0.15, "diff_pair_via_gap": 0.25,
             "diff_pair_width": 0.25, "line_style": 0, "microvia_diameter": 0.3, "microvia_drill": 0.1,
             "pcb_color": "rgba(0, 0, 0, 0.000)", "schematic_color": "rgba(0, 0, 0, 0.000)",
-            "tuning_profile": "", "via_diameter": 0.6, "via_drill": 0.3, "wire_width": 6}
+            "tuning_profile": "", "via_diameter": 0.45, "via_drill": 0.2, "wire_width": 6}
     ns["classes"] = [dict(base, name="Default", priority=2147483647, track_width=0.2),
                      dict(base, name="Power", priority=1, track_width=0.5),
                      # GND is the L2 plane; tracks only stub small pads to vias
@@ -220,7 +223,7 @@ def place_rest(board, comps, pads):
         fps[ref].SetPosition(pt(x, y))
         fps[ref].SetOrientationDegrees(a)
         placed.add(ref)
-    boxes = {r: fp_box(fps[r], GAP) for r in placed}
+    boxes = {r: fp_box(fps[r], GAP + RING.get(r, 0.0)) for r in placed}
     fan = {}
     for (r, _), n in pads.items():
         fan[n] = fan.get(n, 0) + 1
