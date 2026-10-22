@@ -39,6 +39,31 @@ regenerates it and runs the checks.
 - VBUS and VBATT both go to the connector's VBUS. AN70707 never says whether VBATT may float,
   so this is my choice.
 
+### FX3 GPIO budget and the status LED
+Used: GPIO[0..15] and [33..40] (DQ[23:0]), [16] PCLK, [17..20] CTL[0..3] (HS/VS/FID/SOG),
+[30..32] PMODE, [45] TVP7002 reset, [55]/[56] debug UART, [58]/[59] I2C. Free: [21..29] (CTL[4..12]
+on VIO1), [43]/[44] (VIO2), [46..54] (VIO3/VIO4), and [57]. [41] and [42] stay unused because the
+datasheet makes them address lines in a 24-bit GPIF configuration. The FX3's I2S is unused,
+because audio has its own codec on its own USB port.
+
+The status LED D3 is an XL-1615RGBC-RF (LCSC C965840, common anode, pinout from its datasheet
+p.8). The anode is on +3V3 and the cathodes are sunk by GPIO[50]/[51]/[52] (balls D1/D2/D3, the
+I2S balls) through 470R (red) and 100R (green, blue). That is about 2 mA each at typical forward
+voltage. Green and blue have little headroom at 3.3 V, so the values get tuned at bring-up if
+those two read dim. All FX3 I/Os are tristated during reset (datasheet), so the LED is dark then.
+The documents I have don't say whether the boot ROM drives GPIO[50..52] before firmware runs, so
+"off = no firmware" gets checked at bring-up. The RGB LED replaces the single debug LED that was on GPIO[57]. The power LED is unchanged.
+
+Firmware state map:
+
+| LED | State |
+|---|---|
+| off | no firmware running |
+| red | booted, USB not enumerated |
+| amber (red + green) | enumerated, no video sync locked (firmware polls the TVP7002 sync-detect status over I2C) |
+| green | sync locked |
+| blue pulse | streaming to the host |
+
 ## Power, from the FX3's USB 3 VBUS
 - Three TPS563201 bucks, with values from SLVSD90B Table 7-2:
   - 3.3 V digital;

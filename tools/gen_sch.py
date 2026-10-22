@@ -37,6 +37,7 @@ FP = {
     "SOIC8": "Package_SO:SOIC-8_3.9x4.9mm_P1.27mm",
     "USON10": "Package_SON:USON-10_2.5x1.0mm_P0.5mm",
     "LED0603": "LED_SMD:LED_0603_1608Metric",
+    "LED1615RGB": "ps1-av-capture:LED-ARRAY-SMD_4P-L1.6-W1.5-BR_XL-1615RGBC-RF",
     "JTAG": "Connector_PinHeader_1.27mm:PinHeader_2x05_P1.27mm_Vertical_SMD",
     "PHD14": "Connector_JST:JST_PHD_B14B-PHDSS_2x07_P2.00mm_Vertical",
     "HDR3": "Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical",
@@ -49,7 +50,7 @@ FP = {
 # description against the value before the BOM is trusted.
 LCSC_PASSIVE = {
     ("R0402", "22"): "C25092", ("R0402", "75"): "C25133", ("R0402", "200 1%"): "C25087",
-    ("R0402", "1k"): "C11702", ("R0402", "1.5k"): "C25867", ("R0402", "2k"): "C4109",
+    ("R0402", "1k"): "C11702", ("R0402", "100"): "C25076", ("R0402", "470"): "C25117", ("R0402", "1.5k"): "C25867", ("R0402", "2k"): "C4109",
     ("R0402", "2.2k"): "C25879", ("R0402", "5.1k"): "C25905", ("R0402", "6.04k 1%"): "C97819",
     ("R0402", "10k"): "C25744", ("R0402", "22.6k 1%"): "C26960", ("R0402", "33.2k 1%"): "C122548",
     ("R0402", "5.76k 1%"): "C5153969", ("R0402", "100k"): "C25741", ("R0402", "1M"): "C26083",
@@ -340,7 +341,8 @@ for b, n in table("fx3"):
         else:
             fx3_nets[b] = {16: "VD_PCLK", 17: "VD_HS", 18: "VD_VS", 19: "VD_FID", 20: "VD_SOG",
                            30: "FX3_PMODE0", 31: "FX3_PMODE1", 32: "FX3_PMODE2", 45: "TVP_RESETn",
-                           55: "FX3_UART_TX", 56: "FX3_UART_RX", 57: "FX3_LED"}.get(k)
+                           50: "LED_R", 51: "LED_G", 52: "LED_B",
+                           55: "FX3_UART_TX", 56: "FX3_UART_RX"}.get(k)
         continue
     fx3_nets[b] = {
         "I2C_GPIO[58]": "I2C_SCL", "I2C_GPIO[59]": "I2C_SDA", "INT#": None, "NC": None,
@@ -395,13 +397,19 @@ res("fx3", "2k", "I2C_SDA", "+3V3")
 heading("fx3", "USB reference resistors (AN70707): R_USB2 6.04k 1%, R_USB3 200R 1%.")
 res("fx3", "6.04k 1%", "FX3_RUSB2", "GND")
 res("fx3", "200 1%", "FX3_RUSB3", "GND")
-heading("fx3", "Debug: JTAG (no external pulls; FX3 has internal ones), UART on GPIO55/56, LED on GPIO57.")
+heading("fx3", "Debug: JTAG (no external pulls; FX3 has internal ones), UART on GPIO55/56.")
 put("fx3", stk("Connector", "Conn_ARM_JTAG_SWD_10"), "J", "JTAG", {
     1: "+3V3", 2: "FX3_TMS", 3: "GND", 4: "FX3_TCK", 5: "GND", 6: "FX3_TDO", 7: None, 8: "FX3_TDI",
     9: "GND", 10: "FX3_RESETn"}, "JTAG")
 put("fx3", stk("Connector_Generic", "Conn_01x03"), "J", "UART", {1: "FX3_UART_TX", 2: "FX3_UART_RX", 3: "GND"}, "HDR3")
-put("fx3", stk("Device", "LED"), "D", "GREEN", {1: "FX3_LED_K", 2: "+3V3"}, "LED0603", lcsc="C2986059")
-res("fx3", "1k", "FX3_LED_K", "FX3_LED")
+heading("fx3", "Status LED: common-anode RGB on +3V3, cathodes sunk by GPIO50/51/52 (the unused I2S "
+        "balls). Pin order per the XL-1615RGBC-RF datasheet: 1 R, 2 common anode, 3 G, 4 B. "
+        "States in docs/design.md.")
+put("fx3", stk("Device", "LED_RAGB"), "D", "XL-1615RGBC-RF",
+    {1: "LED_R_K", 2: "+3V3", 3: "LED_G_K", 4: "LED_B_K"}, "LED1615RGB", lcsc="C965840")
+res("fx3", "470", "LED_R_K", "LED_R")
+res("fx3", "100", "LED_G_K", "LED_G")
+res("fx3", "100", "LED_B_K", "LED_B")
 heading("fx3", "Decoupling per AN70707 Table 3. AVDD, U3TXVDDQ, U3RXVDDQ and CVDDQ each behind a "
         "ferrite (AN70707 Figure 1, Appendix B); 22 uF on each USB 3 supply (datasheet).")
 for _ in range(8):

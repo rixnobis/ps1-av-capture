@@ -8,6 +8,10 @@
 - FX3 BGA-121: LCSC pads are 0.40 mm. AN70707 recommends 11 mil (0.28 mm) for pad, mask
   and paste.
 - USB3-B: the shell pads are numbered 10/11; the USB3_B symbol calls the shell SH.
+- XL-1615RGBC-RF: the LCSC pattern numbers the pads 1 R, 2 A, 3 B, 4 G. The datasheet (p.8)
+  says 1 R, 2 A, 3 G, 4 B, with 1 and 3 on the same row. The geometry is the same, so the two
+  pads on the far side swap numbers here. They also get the datasheet's 0.45 x 0.65 mm
+  pattern; LCSC's leaves 0.19 mm between R and the anode.
 Each edit asserts its anchor, so a changed source file fails loudly. Already-applied edits are
 reported and skipped.
 """
@@ -61,6 +65,28 @@ def usb3b(s):
     return s
 
 
+def rgb1615(s):
+    if "(size 0.450 0.650)" in s:
+        return s
+    old = [
+        "(pad 1 smd rect (at 0.75 0.42 180.00) (size 0.800 0.650)",
+        "(pad 2 smd rect (at 0.75 -0.42 180.00) (size 0.800 0.650)",
+        "(pad 3 smd rect (at -0.75 -0.42 180.00) (size 0.800 0.650)",
+        "(pad 4 smd rect (at -0.75 0.42 180.00) (size 0.800 0.650)",
+    ]
+    new = [
+        "(pad 1 smd rect (at 0.625 0.475 180.00) (size 0.450 0.650)",
+        "(pad 2 smd rect (at 0.625 -0.475 180.00) (size 0.450 0.650)",
+        "(pad 4 smd rect (at -0.625 -0.475 180.00) (size 0.450 0.650)",
+        "(pad 3 smd rect (at -0.625 0.475 180.00) (size 0.450 0.650)",
+    ]
+    for o, n in zip(old, new):
+        assert o in s, o
+        s = s.replace(o, n, 1)
+    return s
+
+
 edit(LIB / "HTQFP-100_L14.0-W14.0-P0.50-LS16.0-BL-EP6.2.kicad_mod", tvp)
 edit(LIB / "BGA-121_L10.0-W10.0-R11-C11-P0.80-TL.kicad_mod", bga)
 edit(LIB / "USB-B-TH_9P-L18.5-W12.0.kicad_mod", usb3b)
+edit(LIB / "LED-ARRAY-SMD_4P-L1.6-W1.5-BR_XL-1615RGBC-RF.kicad_mod", rgb1615)
