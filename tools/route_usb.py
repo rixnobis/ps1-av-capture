@@ -51,8 +51,10 @@ BOARD = ((0.5, 0.5), (99.5, 0.5), (99.5, 79.5), (0.5, 79.5))
 PLANES = [
     (pcbnew.In1_Cu, "GND", 0, BOARD),
     (pcbnew.In2_Cu, "+3V3", 0, BOARD),
-    (pcbnew.In2_Cu, "+1V2", 1, ((56.0, 40.0), (97.0, 40.0), (97.0, 76.0), (72.0, 76.0),
-                                (72.0, 55.4), (56.0, 55.4))),
+    # +1V2 under the FX3, down its east side and across to its own buck (U7/L3); the 3V3 and
+    # 2V5 bucks stay on the +3V3 region so their outputs can reach it.
+    (pcbnew.In2_Cu, "+1V2", 1, ((56.0, 40.0), (76.0, 40.0), (76.0, 63.0), (92.0, 63.0),
+                                (92.0, 73.0), (72.0, 73.0), (72.0, 55.4), (56.0, 55.4))),
     (pcbnew.In2_Cu, "GND", 2, ((50.0, 55.5), (72.0, 55.5), (72.0, 79.5), (50.0, 79.5))),
 ]
 # Bump: (net, segment index in its first path, side +1 right/-1 left) used to stretch the
