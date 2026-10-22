@@ -67,7 +67,7 @@ PREFER = {"75": "J1"}          # value -> host: video terminations sit at the in
 GAP = 0.25                     # clearance between part outlines when packing
 DIFF_NETS = ["USB3_TXP*", "USB3_TXN*", "USB3_RXP", "USB3_RXN", "USB3_DP", "USB3_DM",
              "AUD_DP*", "AUD_DM*"]
-POWER_NETS = ["GND", "VBUS", "VBUS_AUD", "+3V3*", "+2V5", "+1V2", "+1V9*", "TVP_AVDD",
+POWER_NETS = ["VBUS", "VBUS_AUD", "+3V3*", "+2V5", "+1V2", "+1V9*", "TVP_AVDD",
               "TVP_PLLVDD", "FX3_AVDD", "FX3_U3*", "FX3_CVDDQ", "SW_*", "OSC_VDD"]
 
 
@@ -111,10 +111,13 @@ def write_project():
             "tuning_profile": "", "via_diameter": 0.6, "via_drill": 0.3, "wire_width": 6}
     ns["classes"] = [dict(base, name="Default", priority=2147483647, track_width=0.2),
                      dict(base, name="Power", priority=1, track_width=0.5),
+                     # GND is the L2 plane; tracks only stub small pads to vias
+                     dict(base, name="Ground", priority=1, track_width=0.3),
                      # 90 ohm on JLC04161H-3313A L1/L2 per docs/stackup.md
                      dict(base, name="USB", priority=0, track_width=0.25, clearance=0.15)]
     ns["netclass_patterns"] = ([{"netclass": "USB", "pattern": n} for n in DIFF_NETS] +
-                               [{"netclass": "Power", "pattern": n} for n in POWER_NETS])
+                               [{"netclass": "Power", "pattern": n} for n in POWER_NETS] +
+                               [{"netclass": "Ground", "pattern": "GND"}])
     ns["netclass_assignments"] = {}
     rules = ds.setdefault("rules", {})
     # JLCPCB 4-layer capabilities, with margin: 0.127 mm track/space, 0.2 mm via drill

@@ -11,5 +11,5 @@ python3 tools/check_footprints.py build/netlist.xml
 if [ "${LCSC:-1}" = 1 ]; then python3 tools/check_lcsc.py build/netlist.xml; fi
 kicad-cli sch export pdf -o schematic.pdf ps1-av-capture.kicad_sch >/dev/null
 python3 tools/build_pcb.py place
-python3 tools/route_usb.py 2>/dev/null
+python3 tools/route_usb.py 2> >(grep -v "swig/python detected" >&2)
 echo "build ok"
