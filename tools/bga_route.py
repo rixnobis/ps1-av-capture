@@ -192,16 +192,46 @@ def main():
                 return False
         return True
 
+    ops = []                       # board edits of the attempt in progress, applied at the end
+
     def add_track(li, net, a, b, w):
-        t = pcbnew.PCB_TRACK(board)
-        t.SetStart(pcbnew.VECTOR2I(pcbnew.FromMM(OX + a[0]), pcbnew.FromMM(OY + a[1])))
-        t.SetEnd(pcbnew.VECTOR2I(pcbnew.FromMM(OX + b[0]), pcbnew.FromMM(OY + b[1])))
-        t.SetWidth(pcbnew.FromMM(w))
-        t.SetLayer(LAYERS[li])
-        t.SetNet(nets[net])
-        t.SetLocked(True)
-        board.Add(t)
+        ops.append(("track", li, net, a, b, w))
         stamp(li, net, "seg", (a, b), w / 2)
+
+    def add_via(net, x, y):
+        ops.append(("via", net, x, y))
+        for lj in range(len(LAYERS)):
+            stamp(lj, net, "circle", (x, y), 0.225)
+
+    def bends_ok(ps):
+        """Every corner turns by 45 degrees or less (check_geometry's ACUTE test)."""
+        for u, v, w in zip(ps, ps[1:], ps[2:]):
+            a1 = math.atan2(v[1] - u[1], v[0] - u[0])
+            a2 = math.atan2(w[1] - v[1], w[0] - v[0])
+            if abs((a2 - a1 + math.pi) % (2 * math.pi) - math.pi) > math.pi / 4 + 1e-3:
+                return False
+        return True
+
+    def finish(path, li, k, x, y):
+        """Grid path -> polyline from (x, y). Sub-width segments are merged away where the
+        straight replacement clears the raster and keeps 45-degree bends; returns the points
+        and whether any sub-width segment survived (a staircase squeezing between balls)."""
+        pts = [(ESC_BOX[0] + i * G, ESC_BOX[1] + j * G) for j, i in simplify(path)]
+        pts[0] = (x, y)               # the ball or via centre, not its nearest grid point
+        changed = True
+        while changed and len(pts) > 2:
+            changed = False
+            for q in range(1, len(pts) - 1):
+                if (min(math.dist(pts[q - 1], pts[q]), math.dist(pts[q], pts[q + 1])) < 2 * W
+                        and line_ok(li, k, pts[q - 1], pts[q + 1]) and bends_ok(pts[:q] + pts[q + 1:])):
+                    del pts[q]
+                    changed = True
+                    break
+        if len(pts) > 2 and math.dist(pts[-2], pts[-1]) < 2 * W:
+            pts[-2] = pts[-1]          # the last grid step onto the box edge
+            del pts[-1]
+        stair = any(1e-6 < math.dist(a, b) < 2 * W for a, b in zip(pts, pts[1:]))
+        return pts, stair
 
     u2 = board.FindFootprintByReference("U2")
     jobs = []
@@ -224,106 +254,97 @@ def main():
         face = face_for(net, px, py)
         dist = {"W": px - ESC_BOX[0], "E": ESC_BOX[2] - px, "N": py - ESC_BOX[1], "S": ESC_BOX[3] - py}[face]
         jobs.append((rg, dist, p.GetNumber(), net, starts, face))
-    # F.Cu: ring 2 before ring 1 (a ring-1 ball is on the edge and needs one short stub, while
-    # a ring-2 ball has to thread between two of them), then the via nets, inner rings last
-    jobs.sort(key=lambda j: (j[0] > 2, -j[0] if j[0] <= 2 else j[0], j[1]))
-    done, failed, length = [], [], {}
-    seen_net = set()
-    for rg, _, ball, net, starts, face in jobs:
-        if net in seen_net:                        # FX3_FSLC has several balls: one exit
-            continue
-        seen_net.add(net)
-        k = nid(net)
-        # preferred face first, then the others nearest first (south, the USB corridor, last)
-        x0, y0 = starts[0][1]
-        rest = sorted("WENS".replace(face, ""), key=lambda f: ({"W": x0 - ESC_BOX[0], "E": ESC_BOX[2] - x0,
-                      "N": y0 - ESC_BOX[1], "S": ESC_BOX[3] - y0 + 99}[f]))
-        path = None
-        for f in [face] + rest:
-            for li, (x, y) in starts:
-                path = astar(li, k, cell(x, y), f)
-                if path:
-                    break
-            if path:
-                face = f
-                break
-        if not path and rg <= 2:
-            # boxed in on F.Cu by its neighbours' stubs: drop a dogbone via of its own and
-            # leave on an inner layer instead
-            bx, by = starts[0][1]
-            for vx, vy in sorted([(bx + sx * 0.4, by + sy * 0.4) for sx in (1, -1) for sy in (1, -1)],
-                                 key=lambda q: math.hypot(q[0] - ESC_BOX[0] if face == "W" else 0,
-                                                          q[1] - ESC_BOX[1] if face == "N" else 0)):
-                if not via_fits(k, vx, vy) or not line_ok(0, k, (bx, by), (vx, vy)):
-                    continue
-                for f in [face] + rest:
-                    for li in (2, 1):
-                        path = astar(li, k, cell(vx, vy), f)
-                        if path:
-                            break
-                    if path:
-                        face = f
-                        break
-                if path:
-                    add_track(0, net, (bx, by), (vx, vy), 0.2)
-                    v = pcbnew.PCB_VIA(board)
-                    v.SetPosition(pcbnew.VECTOR2I(pcbnew.FromMM(OX + vx), pcbnew.FromMM(OY + vy)))
-                    v.SetWidth(pcbnew.FromMM(0.45))
-                    v.SetDrill(pcbnew.FromMM(0.2))
-                    v.SetNet(nets[net])
-                    v.SetLocked(True)
-                    board.Add(v)
-                    for lj in range(len(LAYERS)):
-                        stamp(lj, net, "circle", (vx, vy), 0.225)
-                    x, y = vx, vy
-                    break
-        if not path:
-            failed.append(f"{ball} {net} ring {rg} -> {face}")
-            continue
-        pts = [(ESC_BOX[0] + i * G, ESC_BOX[1] + j * G) for j, i in simplify(path)]
-        pts[0] = (x, y)               # the ball or via centre, not its nearest grid point
-        def bends_ok(ps):
-            """Every corner turns by 45 degrees or less (check_geometry's ACUTE test)."""
-            for u, v, w in zip(ps, ps[1:], ps[2:]):
-                a1 = math.atan2(v[1] - u[1], v[0] - u[0])
-                a2 = math.atan2(w[1] - v[1], w[0] - v[0])
-                if abs((a2 - a1 + math.pi) % (2 * math.pi) - math.pi) > math.pi / 4 + 1e-3:
-                    return False
-            return True
-
-        # no sub-width segments: drop an interior point next to a short segment when the
-        # straight line that replaces it still clears everything (line_ok on the raster)
-        changed = True
-        while changed and len(pts) > 2:
-            changed = False
-            for q in range(1, len(pts) - 1):
-                trial = pts[:q] + pts[q + 1:]
-                if (min(math.dist(pts[q - 1], pts[q]), math.dist(pts[q], pts[q + 1])) < 2 * W
-                        and line_ok(li, k, pts[q - 1], pts[q + 1]) and bends_ok(trial)):
-                    del pts[q]
-                    changed = True
-                    break
-        if len(pts) > 2 and math.dist(pts[-2], pts[-1]) < 2 * W:
-            pts[-2] = pts[-1]          # the last grid step onto the box edge
-            del pts[-1]
-        L = 0.0
-        for a, b in zip(pts, pts[1:]):
-            if math.dist(a, b) < 1e-6:
+    def attempt(order):
+        """Route every job in this order on a copy of the raster; edits go to ops."""
+        done, failed, seen_net = [], [], set()
+        for rg, _, ball, net, starts, face in order:
+            if net in seen_net:                    # FX3_FSLC has several balls: one exit
                 continue
+            seen_net.add(net)
+            k = nid(net)
+            x0, y0 = starts[0][1]
+            # preferred face first, then the others nearest first (south, the USB corridor, last)
+            rest = sorted("WENS".replace(face, ""), key=lambda f: ({"W": x0 - ESC_BOX[0], "E": ESC_BOX[2] - x0,
+                          "N": y0 - ESC_BOX[1], "S": ESC_BOX[3] - y0 + 99}[f]))
+            res = None
+            for f in [face] + rest:
+                for li, (x, y) in starts:
+                    path = astar(li, k, cell(x, y), f)
+                    if path:
+                        pts, stair = finish(path, li, k, x, y)
+                        if not (stair and rg <= 2):
+                            res = (li, pts, f, None)
+                        break
+                if res:
+                    break
+            if not res and rg <= 2:
+                # boxed in on F.Cu, or only out through a staircase between two balls: drop a
+                # dogbone via of its own and leave on an inner layer instead
+                for vx, vy in sorted([(x0 + sx * 0.4, y0 + sy * 0.4) for sx in (1, -1) for sy in (1, -1)],
+                                     key=lambda q: math.hypot(q[0] - ESC_BOX[0] if face == "W" else 0,
+                                                              q[1] - ESC_BOX[1] if face == "N" else 0)):
+                    if not via_fits(k, vx, vy) or not line_ok(0, k, (x0, y0), (vx, vy)):
+                        continue
+                    for f in [face] + rest:
+                        for li in (2, 1):
+                            path = astar(li, k, cell(vx, vy), f)
+                            if path:
+                                pts, stair = finish(path, li, k, vx, vy)
+                                res = (li, pts, f, (vx, vy))
+                                break
+                        if res:
+                            break
+                    if res:
+                        break
+            if not res:
+                failed.append(f"{ball} {net} ring {rg} -> {face}")
+                continue
+            li, pts, face, via = res
+            if via:
+                add_track(0, net, (x0, y0), via, 0.2)
+                add_via(net, *via)
+            L = 0.0
+            for a, b in zip(pts, pts[1:]):
+                if math.dist(a, b) > 1e-6:
+                    add_track(li, net, a, b, W)
+                    L += math.dist(a, b)
+            done.append(f"{ball} {net} {board.GetLayerName(LAYERS[li])} -> {face} {L:.2f} mm"
+                        + (" (own dogbone)" if via else ""))
+        return done, failed
+
+    # Two orders, keep the better: ring 2 before ring 1 (a ring-2 ball threads between two
+    # ring-1 balls), and ring 1 first (an edge ball ringed in by its neighbours' exits). Via
+    # nets go last in both, inner rings last of all.
+    base = [o.copy() for o in owner]
+    orders = [sorted(jobs, key=lambda j: (j[0] > 2, -j[0] if j[0] <= 2 else j[0], j[1])),
+              sorted(jobs, key=lambda j: (j[0], j[1]))]
+    best = None
+    for n_ord, order in enumerate(orders):
+        for li in range(len(LAYERS)):
+            owner[li][:] = base[li]
+        ops.clear()
+        done, failed = attempt(order)
+        print(f"  order {n_ord}: {len(done)} out, {len(failed)} failed")
+        if best is None or len(failed) < len(best[1]):
+            best = (done, failed, list(ops))
+    done, failed, chosen = best
+    for op in chosen:
+        if op[0] == "track":
+            _, li, net, a, b, w = op
             t = pcbnew.PCB_TRACK(board)
             t.SetStart(pcbnew.VECTOR2I(pcbnew.FromMM(OX + a[0]), pcbnew.FromMM(OY + a[1])))
             t.SetEnd(pcbnew.VECTOR2I(pcbnew.FromMM(OX + b[0]), pcbnew.FromMM(OY + b[1])))
-            t.SetWidth(pcbnew.FromMM(W))
+            t.SetWidth(pcbnew.FromMM(w))
             t.SetLayer(LAYERS[li])
-            t.SetNet(nets[net])
-            t.SetLocked(True)
-            board.Add(t)
-            for lj in range(len(LAYERS)):
-                if lj == li:
-                    stamp(lj, net, "seg", (a, b), W / 2)
-            L += math.dist(a, b)
-        length[net] = L
-        done.append(f"{ball} {net} {pcbnew.LayerName(LAYERS[li]) if False else board.GetLayerName(LAYERS[li])} -> {face} {L:.2f} mm")
+        else:
+            _, net, x, y = op
+            t = pcbnew.PCB_VIA(board)
+            t.SetPosition(pcbnew.VECTOR2I(pcbnew.FromMM(OX + x), pcbnew.FromMM(OY + y)))
+            t.SetWidth(pcbnew.FromMM(0.45))
+            t.SetDrill(pcbnew.FromMM(0.2))
+        t.SetNet(nets[net])
+        t.SetLocked(True)
+        board.Add(t)
     area = pcbnew.ZONE(board)                      # rule area the .kicad_dru keys on
     area.SetIsRuleArea(True)
     area.SetZoneName("BGA_ESC")
