@@ -10,6 +10,7 @@ G/B and syncs west towards U1, GPIF R north, everything else its nearest face) a
 box edge; the bundle beyond is the next script's job. A* on a 0.05 mm grid, 8-connected, one
 net at a time, no rip-up: prints what it routed and what it could not.
 """
+import fnmatch
 import heapq
 import math
 import sys
@@ -21,6 +22,7 @@ import pcbnew
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from route_usb import OX, OY, PCB  # noqa: E402
 from escape import ring, SKIP_NETS  # noqa: E402
+from build_pcb import POWER_NETS  # noqa: E402
 
 G = 0.05                                   # grid step, mm
 W, CLR = 0.1, 0.1                          # neckdown track width and clearance inside the box
@@ -207,6 +209,8 @@ def main():
         net = p.GetNetname()
         if net in SKIP_NETS or net.startswith(("unconnected", "USB3_")):
             continue
+        if any(fnmatch.fnmatchcase(net, pat) for pat in POWER_NETS):
+            continue                  # supply nets keep their class width: point-to-point step
         px, py = mm(p.GetPosition().x) - OX, mm(p.GetPosition().y) - OY
         rg = ring(p.GetNumber())
         if rg <= 2:
@@ -277,7 +281,31 @@ def main():
             failed.append(f"{ball} {net} ring {rg} -> {face}")
             continue
         pts = [(ESC_BOX[0] + i * G, ESC_BOX[1] + j * G) for j, i in simplify(path)]
-        pts[0] = (x, y)
+        pts[0] = (x, y)               # the ball or via centre, not its nearest grid point
+        def bends_ok(ps):
+            """Every corner turns by 45 degrees or less (check_geometry's ACUTE test)."""
+            for u, v, w in zip(ps, ps[1:], ps[2:]):
+                a1 = math.atan2(v[1] - u[1], v[0] - u[0])
+                a2 = math.atan2(w[1] - v[1], w[0] - v[0])
+                if abs((a2 - a1 + math.pi) % (2 * math.pi) - math.pi) > math.pi / 4 + 1e-3:
+                    return False
+            return True
+
+        # no sub-width segments: drop an interior point next to a short segment when the
+        # straight line that replaces it still clears everything (line_ok on the raster)
+        changed = True
+        while changed and len(pts) > 2:
+            changed = False
+            for q in range(1, len(pts) - 1):
+                trial = pts[:q] + pts[q + 1:]
+                if (min(math.dist(pts[q - 1], pts[q]), math.dist(pts[q], pts[q + 1])) < 2 * W
+                        and line_ok(li, k, pts[q - 1], pts[q + 1]) and bends_ok(trial)):
+                    del pts[q]
+                    changed = True
+                    break
+        if len(pts) > 2 and math.dist(pts[-2], pts[-1]) < 2 * W:
+            pts[-2] = pts[-1]          # the last grid step onto the box edge
+            del pts[-1]
         L = 0.0
         for a, b in zip(pts, pts[1:]):
             if math.dist(a, b) < 1e-6:

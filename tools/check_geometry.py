@@ -99,6 +99,16 @@ def main(path):
                 if ang < 135 - 0.01:
                     findings.append(f"ACUTE {ang:5.1f}deg {t1.GetNetname()} {board.GetLayerName(layer)} at {where(pcbnew.VECTOR2I(x, y))}")
 
+    # micro-segments and necking. A rule area named BGA_ESC is where the .kicad_dru grants a
+    # 0.1 mm neckdown; tracks wholly inside it are held to that instead of their class width.
+    neck_ok = [z for z in board.Zones() if z.GetIsRuleArea() and z.GetZoneName() == "BGA_ESC"]
+
+    def inside(z, p):
+        # an escape route stops ON the box edge, which Contains() calls outside
+        bb = z.GetBoundingBox()
+        e = pcbnew.FromMM(0.01)
+        return bb.GetLeft() - e <= p.x <= bb.GetRight() + e and bb.GetTop() - e <= p.y <= bb.GetBottom() + e
+
     # micro-segments and necking
     ds = board.GetDesignSettings()
     for t in tracks:
@@ -106,6 +116,8 @@ def main(path):
         if L < t.GetWidth():
             findings.append(f"SHORT {mm(L):.3f}mm {t.GetNetname()} {board.GetLayerName(t.GetLayer())} at {where(t.GetStart())}")
         want = pcbnew.FromMM(class_width(path, t.GetNetname()))
+        if any(inside(z, t.GetStart()) and inside(z, t.GetEnd()) for z in neck_ok):
+            want = min(want, pcbnew.FromMM(0.1))     # escape-box neckdown, .kicad_dru BGA_ESC
         if t.GetWidth() < want - TOL:
             findings.append(f"NECKED {mm(t.GetWidth()):.2f}<{mm(want):.2f}mm {t.GetNetname()} "
                             f"{board.GetLayerName(t.GetLayer())} at {where(t.GetStart())}")
