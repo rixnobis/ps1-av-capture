@@ -307,6 +307,28 @@ def place_rest(board, comps, pads):
     print("placed", len(placed) - len(FIXED) - len(HAND), "parts next to their anchors")
 
 
+def to_back(board):
+    """U2's plane-net 0402 decoupling goes to B.Cu, same spot, mirrored.
+
+    Every one of them is GND to +3V3 or +1V2 and lands on its planes through fanout.py's
+    vias, so it needs no F.Cu at all, while the F.Cu around U2 is where the GPIF bundle and
+    the BGA escape have to run.
+    """
+    fx, fy = FIXED["U2"][:2]
+    planes = {"GND", "+3V3", "+1V2"}
+    moved = []
+    for fp in board.GetFootprints():
+        x, y = pcbnew.ToMM(fp.GetPosition().x) - OX, pcbnew.ToMM(fp.GetPosition().y) - OY
+        pads = list(fp.Pads())
+        if (fp.GetReference()[0] == "C" and "0402" in fp.GetFPIDAsString() and len(pads) == 2
+                and {p.GetNetname() for p in pads} <= planes and "GND" in {p.GetNetname() for p in pads}
+                and abs(x - fx) < 12 and abs(y - fy) < 11):
+            fp.Flip(fp.GetPosition(), pcbnew.FLIP_DIRECTION_LEFT_RIGHT)
+            moved.append(fp.GetReference())
+    assert moved, "no U2 decoupling found"
+    print("to B.Cu:", len(moved), " ".join(sorted(moved)))
+
+
 def place():
     write_project()
     comps, pads = netlist()
@@ -357,6 +379,7 @@ def place():
                 pad.SetLocalZoneConnection(pcbnew.ZONE_CONNECTION_FULL)
     check_orientation(board)
     place_rest(board, comps, pads)
+    to_back(board)
     outline(board)
     board.Save(str(PCB))
     print("fixed", len(FIXED), "hand", len(HAND))

@@ -161,7 +161,7 @@ def main():
                 t.SetStart(pcbnew.VECTOR2I(pcbnew.FromMM(OX + px), pcbnew.FromMM(OY + py)))
                 t.SetEnd(pcbnew.VECTOR2I(pcbnew.FromMM(OX + vx), pcbnew.FromMM(OY + vy)))
                 t.SetWidth(pcbnew.FromMM(STUB))
-                t.SetLayer(pcbnew.F_Cu)
+                t.SetLayer(pcbnew.B_Cu if p.IsOnLayer(pcbnew.B_Cu) else pcbnew.F_Cu)
                 t.SetNet(nets[net])
                 t.SetLocked(True)
                 board.Add(t)
