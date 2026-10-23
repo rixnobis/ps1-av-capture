@@ -59,6 +59,26 @@ PLANES = [
                                 (92.0, 73.0), (72.0, 73.0), (72.0, 55.4), (51.0, 55.4))),
     (pcbnew.In2_Cu, "GND", 2, GND_ISLAND),
 ]
+# U2's six +3V3 (VIO) balls sit over the +1V2 island. Each one's outward dogbone via gets a
+# +3V3 channel on L3 from the via out past the island edge to the main +3V3 pour, so the
+# island is cut into fingers instead of the balls being stranded. fanout.py's outward-first
+# candidate order lands each via in its channel. Ball -> (ball x, y), checked in main().
+V3_BALLS = {"B1": (66.0, 53.2), "C11": (58.0, 52.4), "E3": (64.4, 50.8),
+            "F1": (66.0, 50.0), "H11": (58.0, 48.4), "L9": (59.6, 46.0)}
+
+
+def _rect(x0, y0, x1, y1):
+    return ((x0, y0), (x1, y0), (x1, y1), (x0, y1))
+
+
+V3_CHANNELS = [
+    _rect(50.0, 47.5, 58.1, 48.5),    # H11, via (57.6, 48.0), west
+    _rect(50.0, 52.3, 58.1, 53.3),    # C11, via (57.6, 52.8), west
+    _rect(58.7, 39.0, 59.7, 46.1),    # L9, via (59.2, 45.6), north
+    _rect(64.3, 49.9, 77.0, 51.7),    # E3 via (64.8, 51.2) and F1 via (66.4, 50.4), east
+    _rect(65.9, 53.1, 77.0, 54.1),    # B1, via (66.4, 53.6), east
+]
+PLANES += [(pcbnew.In2_Cu, "+3V3", 3, r) for r in V3_CHANNELS]
 # Bump: (net, segment index in its first path, side +1 right/-1 left) used to stretch the
 # shorter member of each pair.
 PAIRS = [(("USB3_TXN_C", "USB3_TXN"), ("USB3_TXP_C", "USB3_TXP"), 0.05),
@@ -149,6 +169,12 @@ def main():
         v.SetDrill(pcbnew.FromMM(drill))
         v.SetNet(nets[net])
         board.Add(v)
+    u2 = board.FindFootprintByReference("U2")
+    for ball, (bx, by) in V3_BALLS.items():
+        q = [p for p in u2.Pads() if p.GetNumber() == ball][0]
+        assert q.GetNetname() == "+3V3", (ball, q.GetNetname())
+        assert abs(pcbnew.ToMM(q.GetPosition().x) - OX - bx) < 0.01, ball
+        assert abs(pcbnew.ToMM(q.GetPosition().y) - OY - by) < 0.01, ball
     for layer, net, prio, poly in PLANES:
         zone = pcbnew.ZONE(board)
         zone.SetLayer(layer)

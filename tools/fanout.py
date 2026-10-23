@@ -75,6 +75,7 @@ def main():
             obst.append((p.GetNetname(), "rect",
                          (mm(bb.GetLeft()) - OX, mm(bb.GetTop()) - OY,
                           mm(bb.GetRight()) - OX, mm(bb.GetBottom()) - OY), 0.0))
+    n_pad_obst = len(obst)
     for t in board.GetTracks():
         if t.GetClass() == "PCB_VIA":
             obst.append((t.GetNetname(), "circle", (mm(t.GetPosition().x) - OX,
@@ -105,6 +106,9 @@ def main():
         return all(clear(net, a[0] + (b[0] - a[0]) * i / n, a[1] + (b[1] - a[1]) * i / n,
                          STUB / 2) for i in range(1, n))
 
+    # hole-to-hole spacing applies between vias only; a BGA ball is also a "circle" obstacle,
+    # and counting balls here rejected every dogbone on its own ball (0.57 mm < 0.7 mm)
+    vias = {g for _, k, g, _ in obst if k == "circle"} - {g for _, k, g, _ in obst[:n_pad_obst]}
     placed, failed = 0, []
     for fp in board.GetFootprints():
         ref = fp.GetReference()
@@ -152,7 +156,7 @@ def main():
             for vx, vy in cands:
                 if not reaches_plane(net, vx, vy):
                     continue
-                if any(k == "circle" and n == net and math.dist((vx, vy), g) < VIA_D + 0.25
+                if any(k == "circle" and n == net and g in vias and math.dist((vx, vy), g) < VIA_D + 0.25
                        for n, k, g, _ in obst):
                     continue                          # same-net vias still keep hole-to-hole
                 if not clear(net, vx, vy, VIA_D / 2) or not stub_clear(net, (px, py), (vx, vy)):
@@ -173,6 +177,7 @@ def main():
                 v.SetLocked(True)
                 board.Add(v)
                 obst.append((net, "circle", (vx, vy), VIA_D / 2))
+                vias.add((vx, vy))
                 obst.append((net, "seg", ((px, py), (vx, vy)), STUB / 2))
                 placed += 1
                 break
