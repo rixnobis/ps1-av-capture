@@ -26,7 +26,8 @@ from build_pcb import POWER_NETS  # noqa: E402
 
 G = 0.05                                   # grid step, mm
 W, CLR = 0.1, 0.1                          # neckdown track width and clearance inside the box
-ESC_BOX = (55.0, 43.0, 69.0, 57.0)         # x0, y0, x1, y1 (board mm); must match the .kicad_dru
+ESC_BOX = (55.0, 43.0, 69.0, 57.0)         # x0, y0, x1, y1 (board mm)
+SKIRT = 1.0                                # rule area BGA_ESC margin past ESC_BOX (gpif_route.NECK)
 LAYERS = [pcbnew.F_Cu, pcbnew.In2_Cu, pcbnew.B_Cu]
 NX = int(round((ESC_BOX[2] - ESC_BOX[0]) / G)) + 1
 NY = int(round((ESC_BOX[3] - ESC_BOX[1]) / G)) + 1
@@ -359,7 +360,10 @@ def main():
     area.SetLayerSet(ls)
     ol = area.Outline()
     ol.NewOutline()
-    for x, y in ((ESC_BOX[0], ESC_BOX[1]), (ESC_BOX[2], ESC_BOX[1]), (ESC_BOX[2], ESC_BOX[3]), (ESC_BOX[0], ESC_BOX[3])):
+    # the rule area reaches SKIRT past the router's box, so tools/gpif_route.py can fan the
+    # bundle out at 0.1/0.1 before it widens to the netclass rules
+    x0, y0, x1, y1 = ESC_BOX[0] - SKIRT, ESC_BOX[1] - SKIRT, ESC_BOX[2] + SKIRT, ESC_BOX[3] + SKIRT
+    for x, y in ((x0, y0), (x1, y0), (x1, y1), (x0, y1)):
         ol.Append(pcbnew.FromMM(OX + x), pcbnew.FromMM(OY + y))
     board.Add(area)
     pcbnew.ZONE_FILLER(board).Fill(board.Zones())

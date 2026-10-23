@@ -124,6 +124,8 @@ def write_project():
             "tuning_profile": "", "via_diameter": 0.45, "via_drill": 0.2, "wire_width": 6}
     ns["classes"] = [dict(base, name="Default", priority=2147483647, track_width=0.2),
                      dict(base, name="Power", priority=1, track_width=0.5),
+                     # GPIF bus TVP7002 -> FX3 (tools/gpif_route.py): 0.127 mm so the bundle fits
+                     dict(base, name="GPIF", priority=1, track_width=0.127),
                      # GND is the L2 plane; tracks only stub small pads to vias
                      # plane nets: tracks only stub pads to plane vias (tools/fanout.py)
                      dict(base, name="Plane", priority=0, track_width=0.25),
@@ -131,7 +133,8 @@ def write_project():
                      dict(base, name="USB", priority=0, track_width=0.25, clearance=0.15)]
     ns["netclass_patterns"] = ([{"netclass": "USB", "pattern": n} for n in DIFF_NETS] +
                                [{"netclass": "Power", "pattern": n} for n in POWER_NETS] +
-                               [{"netclass": "Plane", "pattern": n} for n in ("GND", "+3V3", "+1V2")])
+                               [{"netclass": "Plane", "pattern": n} for n in ("GND", "+3V3", "+1V2")] +
+                               [{"netclass": "GPIF", "pattern": "VD_*"}])
     ns["netclass_assignments"] = {}
     rules = ds.setdefault("rules", {})
     # JLCPCB 4-layer capabilities, with margin: 0.127 mm track/space, 0.2 mm via drill. The
