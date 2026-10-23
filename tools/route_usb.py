@@ -54,8 +54,9 @@ PLANES = [
     (pcbnew.In2_Cu, "+3V3", 0, BOARD),
     # +1V2 under the FX3, down its east side and across to its own buck (U7/L3); the 3V3 and
     # 2V5 bucks stay on the +3V3 region so their outputs can reach it.
-    (pcbnew.In2_Cu, "+1V2", 1, ((56.0, 40.0), (76.0, 40.0), (76.0, 63.0), (92.0, 63.0),
-                                (92.0, 73.0), (72.0, 73.0), (72.0, 55.4), (56.0, 55.4))),
+    # It reaches west to x=51.0 so the +1V2 decaps west of U2 (B.Cu, build_pcb.to_back) land on it.
+    (pcbnew.In2_Cu, "+1V2", 1, ((51.0, 40.0), (76.0, 40.0), (76.0, 63.0), (92.0, 63.0),
+                                (92.0, 73.0), (72.0, 73.0), (72.0, 55.4), (51.0, 55.4))),
     (pcbnew.In2_Cu, "GND", 2, GND_ISLAND),
 ]
 # Bump: (net, segment index in its first path, side +1 right/-1 left) used to stretch the
