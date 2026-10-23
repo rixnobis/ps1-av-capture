@@ -307,6 +307,15 @@ def place_rest(board, comps, pads):
     print("placed", len(placed) - len(FIXED) - len(HAND), "parts next to their anchors")
 
 
+# B.Cu spots for U2's +3V3 decaps, north of the L3 +1V2 island (route_usb.PLANES, y >= 40)
+V3_ROW = [(57.0 + 2.0 * i, 38.6) for i in range(6)]
+
+
+def in_island(x, y):
+    """Inside the rectangular body of the L3 +1V2 island (route_usb.PLANES), with margin."""
+    return 51.0 - 1.0 < x < 76.0 + 1.0 and 40.0 - 1.0 < y < 55.4 + 1.0
+
+
 def to_back(board):
     """U2's plane-net 0402 decoupling goes to B.Cu, same spot, mirrored.
 
@@ -316,7 +325,7 @@ def to_back(board):
     """
     fx, fy = FIXED["U2"][:2]
     planes = {"GND", "+3V3", "+1V2"}
-    moved = []
+    moved, relocated = [], []
     for fp in board.GetFootprints():
         x, y = pcbnew.ToMM(fp.GetPosition().x) - OX, pcbnew.ToMM(fp.GetPosition().y) - OY
         pads = list(fp.Pads())
@@ -325,7 +334,17 @@ def to_back(board):
                 and abs(x - fx) < 12 and abs(y - fy) < 11):
             fp.Flip(fp.GetPosition(), pcbnew.FLIP_DIRECTION_LEFT_RIGHT)
             moved.append(fp.GetReference())
+            if "+3V3" in {p.GetNetname() for p in pads} and in_island(x, y):
+                # L3 is +1V2 here, so a +3V3 via has nothing to land on: the cap goes to a
+                # row just north of the island, +3V3 pad up, where L3 is +3V3 again
+                fp.SetPosition(pt(*V3_ROW[len(relocated)]))
+                fp.SetOrientationDegrees(90)
+                p3 = [p for p in fp.Pads() if p.GetNetname() == "+3V3"][0]
+                if pcbnew.ToMM(p3.GetPosition().y) - OY > V3_ROW[0][1]:
+                    fp.SetOrientationDegrees(270)
+                relocated.append(fp.GetReference())
     assert moved, "no U2 decoupling found"
+    print("+3V3 caps out of the +1V2 island:", " ".join(relocated))
     print("to B.Cu:", len(moved), " ".join(sorted(moved)))
 
 
