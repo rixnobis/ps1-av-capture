@@ -134,8 +134,10 @@ def write_project():
                                [{"netclass": "Plane", "pattern": n} for n in ("GND", "+3V3", "+1V2")])
     ns["netclass_assignments"] = {}
     rules = ds.setdefault("rules", {})
-    # JLCPCB 4-layer capabilities, with margin: 0.127 mm track/space, 0.2 mm via drill
-    rules.update({"min_clearance": 0.127, "min_track_width": 0.127, "min_via_diameter": 0.45,
+    # JLCPCB 4-layer capabilities, with margin: 0.127 mm track/space, 0.2 mm via drill. The
+    # board floor is 0.1/0.1 for the FX3 escape box only; ps1-av-capture.kicad_dru holds every
+    # other track to 0.127 and grants 0.1 only inside the BGA_ESC rule area (tools/bga_route.py)
+    rules.update({"min_clearance": 0.1, "min_track_width": 0.1, "min_via_diameter": 0.45,
                   "min_via_annular_width": 0.1, "min_through_hole_diameter": 0.2,
                   "min_copper_edge_clearance": 0.4, "min_hole_clearance": 0.2,
                   "min_hole_to_hole": 0.4, "min_silk_clearance": 0.0, "min_text_height": 0.8,
