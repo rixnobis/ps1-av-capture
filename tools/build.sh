@@ -16,4 +16,5 @@ python3 tools/fanout.py 2> >(grep -v "swig/python detected" >&2)
 python3 tools/escape.py 2> >(grep -v "swig/python detected" >&2)
 python3 tools/bga_route.py 2> >(grep -v "swig/python detected" >&2)
 python3 tools/gpif_route.py 2> >(grep -v "swig/python detected" >&2)
+python3 tools/p2p_route.py 2> >(grep -v "swig/python detected" >&2)
 echo "build ok"
