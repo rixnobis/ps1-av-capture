@@ -59,6 +59,16 @@ def seg_dist(px, py, a, b):
     return math.hypot(px - ax - t * (bx - ax), py - ay - t * (by - ay))
 
 
+def collinear(s, t, tol=0.01):
+    """Two segments on one line sharing more than a point: redundant copper."""
+    (ax, ay), (bx, by) = s
+    L = math.hypot(bx - ax, by - ay) or 1.0
+    if any(abs((bx - ax) * (qy - ay) - (by - ay) * (qx - ax)) / L > tol for qx, qy in t):
+        return False
+    pts = [q for q in s if seg_dist(*q, *t) < tol] + [q for q in t if seg_dist(*q, *s) < tol]
+    return len({(round(x, 4), round(y, 4)) for x, y in pts}) >= 2
+
+
 def main():
     board = pcbnew.LoadBoard(str(PCB))
     nets = board.GetNetsByName()
@@ -109,7 +119,7 @@ def main():
     # hole-to-hole spacing applies between vias only; a BGA ball is also a "circle" obstacle,
     # and counting balls here rejected every dogbone on its own ball (0.57 mm < 0.7 mm)
     vias = {g for _, k, g, _ in obst if k == "circle"} - {g for _, k, g, _ in obst[:n_pad_obst]}
-    placed, failed = 0, []
+    placed, failed, shared, served = 0, [], 0, []   # served: (net, pad or via centre) on the plane
     for fp in board.GetFootprints():
         ref = fp.GetReference()
         c = fp.GetPosition()
@@ -140,6 +150,13 @@ def main():
                     obst.append((net, "seg", ((px, py), end), STUB / 2))
                     placed += 1
                     continue
+            # a pad that already holds a same-net via (a neighbour's, landed on it) or sits under
+            # an already fanned pad (stacked USB-C A1/B12) is on the plane: a second stub from the
+            # same point made an acute vertex (J3) or ran back over the first one (L3/C94)
+            if any(n == net and p.HitTest(pcbnew.VECTOR2I(pcbnew.FromMM(OX + q[0]), pcbnew.FromMM(OY + q[1])))
+                   for n, q in served):
+                shared += 1
+                continue
             if bga:
                 cands = [(px + sx * 0.4, py + sy * 0.4) for sx in (1, -1) for sy in (1, -1)]
                 cands.sort(key=lambda q: -math.hypot(q[0] - cx, q[1] - cy))   # outward first
@@ -161,6 +178,10 @@ def main():
                     continue                          # same-net vias still keep hole-to-hole
                 if not clear(net, vx, vy, VIA_D / 2) or not stub_clear(net, (px, py), (vx, vy)):
                     continue
+                if any(n == net and (k == "circle" and g in vias and seg_dist(*g, (px, py), (vx, vy)) < STUB / 2
+                                     or k == "seg" and collinear(g, ((px, py), (vx, vy))))
+                       for n, k, g, hw in obst[n_pad_obst:]):
+                    continue                          # the stub would run over a same-net via or stub
                 t = pcbnew.PCB_TRACK(board)
                 t.SetStart(pcbnew.VECTOR2I(pcbnew.FromMM(OX + px), pcbnew.FromMM(OY + py)))
                 t.SetEnd(pcbnew.VECTOR2I(pcbnew.FromMM(OX + vx), pcbnew.FromMM(OY + vy)))
@@ -179,13 +200,15 @@ def main():
                 obst.append((net, "circle", (vx, vy), VIA_D / 2))
                 vias.add((vx, vy))
                 obst.append((net, "seg", ((px, py), (vx, vy)), STUB / 2))
+                served.append((net, (px, py)))
+                served.append((net, (vx, vy)))
                 placed += 1
                 break
             else:
                 failed.append(f"{ref}.{p.GetNumber()} {net}")
     pcbnew.ZONE_FILLER(board).Fill(board.Zones())
     board.Save(str(PCB))
-    print(f"fanout: {placed} pads to planes, {len(failed)} left for the router")
+    print(f"fanout: {placed} pads to planes, {shared} on a neighbour's via, {len(failed)} left for the router")
     for f in failed:
         print("  unfanned", f)
 
