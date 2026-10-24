@@ -141,8 +141,10 @@ def main():
                     return False
         return True
 
-    def astar(k, starts, goal):
-        """starts: [(li, j, i)]; goal: set of (li, j, i). 8-connected plus vias."""
+    def astar(k, starts, goal, occ=None, hist=None, pf=0.0):
+        """starts: [(li, j, i)]; goal: set of (li, j, i). 8-connected plus vias. With occ/hist,
+        a step into a cell other bundle nets occupy costs pf per occupant plus the cell's history
+        (negotiated congestion); without them those cells are simply free."""
         gj = sum(g[1] for g in goal) / len(goal)
         gi = sum(g[2] for g in goal) / len(goal)
         h = lambda j, i: math.hypot(j - gj, i - gi) * 1.3  # noqa: E731  (weighted: fast, near-optimal)
@@ -176,6 +178,8 @@ def main():
                 turn = 0.3 if par is not None and par[0] == li and (j - par[1], i - par[2]) != (dj, di) else 0
                 n = (li, nj, ni)
                 ng = g + cost + turn
+                if occ is not None:
+                    ng += cost * (hist[li][nj, ni] + pf * occ[li][nj, ni])
                 if ng < best.get(n, 1e18):
                     best[n] = ng
                     heapq.heappush(openq, (ng + h(nj, ni), ng, n, c))
@@ -183,6 +187,8 @@ def main():
                 if lj != li and via_ok(k, j, i):
                     n = (lj, j, i)
                     ng = g + VIA_COST
+                    if occ is not None:
+                        ng += 4 * pf * sum(o[j, i] for o in occ)
                     if ng < best.get(n, 1e18):
                         best[n] = ng
                         heapq.heappush(openq, (ng + h(j, i), ng, n, c))
@@ -292,6 +298,149 @@ def main():
           done.append(f"{net:9s} -> {ref:4s} {L:6.2f} mm, {vias} via(s)")
       return done, failed, total, new_items
 
+    def region(kind, g, ext):
+        """(j0, i0, bool mask) of the cells within ext + INFL of an item: where another net's
+        track centre may not go."""
+        r = ext + CLR_OUT + W_OUT / 2 + 0.01
+        if kind == "circle":
+            bx = (g[0] - r, g[1] - r, g[0] + r, g[1] + r)
+        else:
+            a_, b_ = g
+            bx = (min(a_[0], b_[0]) - r, min(a_[1], b_[1]) - r, max(a_[0], b_[0]) + r, max(a_[1], b_[1]) + r)
+        i0, i1 = max(0, int((bx[0] - BUNDLE_BOX[0]) / G)), min(NX - 1, int((bx[2] - BUNDLE_BOX[0]) / G) + 1)
+        j0, j1 = max(0, int((bx[1] - BUNDLE_BOX[1]) / G)), min(NY - 1, int((bx[3] - BUNDLE_BOX[1]) / G) + 1)
+        X, Y = np.meshgrid(XS[i0:i1 + 1], YS[j0:j1 + 1])
+        if kind == "circle":
+            d = np.hypot(X - g[0], Y - g[1])
+        else:
+            (ax, ay), (bx2, by2) = g
+            vx, vy = bx2 - ax, by2 - ay
+            t = np.clip(((X - ax) * vx + (Y - ay) * vy) / (vx * vx + vy * vy or 1e-12), 0, 1)
+            d = np.hypot(X - ax - t * vx, Y - ay - t * vy)
+        return j0, i0, d < ext + INFL[j0:j1 + 1, i0:i1 + 1] - 1e-6
+
+    def build(net, k, path, sx, sy):
+        """Grid path -> (items, length, vias); sub-width steps merged where the straight line
+        clears the fixed obstacles, keeps 45-degree bends and stays on one side of the neck edge."""
+        xy = lambda c: (BUNDLE_BOX[0] + c[2] * G, BUNDLE_BOX[1] + c[1] * G)  # noqa: E731
+        pts = [path[0]]
+        for a_, b_, c_ in zip(path, path[1:], path[2:]):
+            if (b_[0] != a_[0] or c_[0] != b_[0] or (b_[1] - a_[1], b_[2] - a_[2]) != (c_[1] - b_[1], c_[2] - b_[2])
+                    or INNECK[a_[1], a_[2]] != INNECK[c_[1], c_[2]]):
+                pts.append(b_)
+        pts.append(path[-1])
+        runs, cur_li, cur = [], pts[0][0], [(sx, sy)]
+        for q in pts[1:]:
+            if q[0] != cur_li:
+                runs.append((cur_li, cur))
+                cur_li, cur = q[0], [xy(q)]
+            else:
+                cur.append(xy(q))
+        runs.append((cur_li, cur))
+        items, L, nv = [], 0.0, 0
+        for n_run, (li, run) in enumerate(runs):
+            changed = True
+            while changed and len(run) > 2:
+                changed = False
+                for q in range(1, len(run) - 1):
+                    if (min(math.dist(run[q - 1], run[q]), math.dist(run[q], run[q + 1])) < 2 * W_OUT
+                            and in_neck(*run[q - 1]) == in_neck(*run[q + 1])
+                            and line_ok(li, k, run[q - 1], run[q + 1]) and bends_ok(run[:q] + run[q + 1:])):
+                        del run[q]
+                        changed = True
+                        break
+            if n_run:
+                items.append(("via", net, run[0]))
+                nv += 1
+            for pa, pb in zip(run, run[1:]):
+                if math.dist(pa, pb) > 1e-6:
+                    items.append(("track", net, li, pa, pb, W_IN if in_neck(*pa) and in_neck(*pb) else W_OUT))
+                    L += math.dist(pa, pb)
+        return items, L, nv
+
+    def masks_of(items):
+        """One boolean union per layer: a net occupies a cell once however many of its own
+        segments cover it (a sum would count every joint as a conflict with itself)."""
+        out = [np.zeros((NY, NX), dtype=bool) for _ in LAYERS]
+        for it in items:
+            parts = ([(lj, region("circle", it[2], VIA_R)) for lj in range(len(LAYERS))] if it[0] == "via"
+                     else [(it[2], region("seg", (it[3], it[4]), it[5] / 2))])
+            for li, (j0, i0, m) in parts:
+                out[li][j0:j0 + m.shape[0], i0:i0 + m.shape[1]] |= m
+        return out
+
+    def apply(occ, ms, sign):
+        for li, m in enumerate(ms):
+            occ[li] += sign * m
+
+    def negotiate(order, iters=10):
+        """PathFinder-style: every net routes every iteration, sharing allowed at a cost that
+        grows each round (pf) plus a per-cell history of past conflicts, until no path centre
+        sits in another net's clearance region."""
+        occ = [np.zeros((NY, NX), dtype=np.float32) for _ in LAYERS]
+        hist = [np.zeros((NY, NX), dtype=np.float32) for _ in LAYERS]
+        routes = {}                                   # net -> (items, L, vias, masks, path)
+        pf = 0.5
+        for it_n in range(iters):
+            for net, (sli, sx, sy), ref, rect in order:
+                k = nid(net)
+                if net in routes:
+                    apply(occ, routes[net][3], -1)
+                goal = set()
+                j0, i0 = cell(rect[0], rect[1])
+                j1, i1 = cell(rect[2], rect[3])
+                for jj in range(j0, j1 + 1):
+                    for ii in range(i0, i1 + 1):
+                        if owner[0][jj, ii] in (0, k):
+                            goal.add((0, jj, ii))
+                sj, si = cell(sx, sy)
+                path = astar(k, [(sli, sj, si)], goal, occ, hist, pf) if goal else None
+                if not path:
+                    routes.pop(net, None)
+                    continue
+                items, L, nv = build(net, k, path, sx, sy)
+                ms = masks_of(items)
+                apply(occ, ms, +1)
+                routes[net] = (items, L, nv, ms, path)
+            bad = []
+            for net, (items, L, nv, ms, path) in routes.items():
+                c = [(li, j, i) for li, j, i in path if occ[li][j, i] > 1.5]
+                for li, j, i in c:
+                    hist[li][j, i] += 1.0
+                if c:
+                    bad.append(net)
+            missing = [j[0] for j in order if j[0] not in routes]
+            print(f"  negotiate iter {it_n + 1}: {len(routes)} routed, {len(bad)} in conflict, "
+                  f"{len(missing)} unroutable, pf {pf:.2f}", flush=True)
+            if not bad and not missing:
+                break
+            pf *= 1.6
+        # commit in order, dropping any net that still overlaps a committed one
+        committed = [np.zeros((NY, NX), dtype=np.float32) for _ in LAYERS]
+        centres = [np.zeros((NY, NX), dtype=bool) for _ in LAYERS]    # committed path centres
+        via_pts = []          # a via's clearance region is sized for a track, not another via
+        done, failed, total, new_items = [], [], {}, []
+        for net, _, ref, _ in order:
+            if net not in routes:
+                failed.append(f"{net} -> {ref}")
+                continue
+            items, L, nv, ms, path = routes[net]
+            # both directions: my centre line in their clearance, and their centre line in mine
+            my_vias = [it[2] for it in items if it[0] == "via"]
+            if (any(committed[li][j, i] > 0 for li, j, i in path)
+                    or any((ms[li] & centres[li]).any() for li in range(len(LAYERS)))
+                    or any(math.dist(v, w) < 2 * VIA_R + CLR_OUT for v in my_vias for w in via_pts)):
+                failed.append(f"{net} -> {ref} (conflict)")
+                continue
+            apply(committed, ms, +1)
+            for li, j, i in path:
+                centres[li][j, i] = True
+            via_pts.extend(my_vias)
+            new_items += items
+            total[net] = L
+            done.append(f"{net:9s} -> {ref:4s} {L:6.2f} mm, {nv} via(s)")
+        return done, failed, total, new_items
+
     # Two orders on copies of the raster, keep the better: nearest target first, then the
     # first pass's failures first
     import os
@@ -303,18 +452,24 @@ def main():
             print("  debug", net, "start", st, "owner there", owner[st[0]][sj, si], "k", k,
                   "neighbours free", sum(owner[st[0]][sj + a, si + b] in (0, k) for a in (-1, 0, 1) for b in (-1, 0, 1)),
                   "target", ref, [round(v, 2) for v in rect])
-    base = [o.copy() for o in owner]
-    result = attempt(jobs)
-    print(f"  pass 1: {len(result[0])} routed, {len(result[1])} failed")
-    if result[1]:
-        names = {f.split()[0] for f in result[1]}
-        order2 = [j for j in jobs if j[0] in names] + [j for j in jobs if j[0] not in names]
-        for li in range(len(LAYERS)):
-            owner[li][:] = base[li]
-        r2 = attempt(order2)
-        print(f"  pass 2 (failures first): {len(r2[0])} routed, {len(r2[1])} failed")
-        if len(r2[1]) < len(result[1]):
-            result = r2
+    # Greedy (attempt) is the default: on this board it routes 22 of 29. The negotiated router
+    # (--negotiate) did not converge in 10 rounds (about 20 nets left in conflict) and committed
+    # 16; it stays here for the next attempt at the crossing problem.
+    if "--negotiate" in sys.argv:
+        result = negotiate(jobs)
+    else:
+        base = [o.copy() for o in owner]
+        result = attempt(jobs)
+        print(f"  pass 1: {len(result[0])} routed, {len(result[1])} failed")
+        if result[1]:
+            names = {f.split()[0] for f in result[1]}
+            order2 = [j for j in jobs if j[0] in names] + [j for j in jobs if j[0] not in names]
+            for li in range(len(LAYERS)):
+                owner[li][:] = base[li]
+            r2 = attempt(order2)
+            print(f"  pass 2 (failures first): {len(r2[0])} routed, {len(r2[1])} failed")
+            if len(r2[1]) < len(result[1]):
+                result = r2
     done, failed, total, new_items = result
     for it in new_items:
         if it[0] == "via":
