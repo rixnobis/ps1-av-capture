@@ -50,13 +50,16 @@ HAND = {
 }
 # 22R series terminations at the TVP7002's outputs, keyed by the TVP-side net (pad 1). They sit
 # just outside U1's escape ring in pin order, so each bus fans out on L1 with no crossings:
-# B/G and DATACLK in a row under the south pins, R in a column right of the east pins, the
-# syncs in a column left of the west pins. Pad 2 (the VD_* side) faces away from U1.
+# B/G, DATACLK and the syncs in one row under the south pins (the syncs come round U1's
+# south-west corner from the west pins, so their VD side joins the bundle instead of needing a
+# route of its own to the far side of U1), R in a column right of the east pins. Pad 2 (the
+# VD_* side) faces away from U1.
 SERIES = {"TVP_DATACLK": (26.6, 37.2, -90)}  # 1.05 pitch: 0402 courtyards are 1.03 wide
 SERIES.update({f"TVP_B{9 - i}": (26.6 + 1.05 * (1 + i), 37.2, -90) for i in range(8)})
 SERIES.update({f"TVP_G{9 - i}": (26.6 + 1.05 * (9 + i), 37.2, -90) for i in range(8)})
 SERIES.update({f"TVP_R{2 + i}": (44.2, 24.15 + 1.1 * i, 0) for i in range(8)})
-SERIES.update({n: (22.6, 29.6 + 1.1 * i, 180) for i, n in
+# FID..SOG left to right: SOG is the lowest west pin, so it turns the corner innermost
+SERIES.update({n: (26.6 - 1.05 * (4 - i), 37.2, -90) for i, n in
                enumerate(("TVP_FIDOUT", "TVP_VSOUT", "TVP_HSOUT", "TVP_SOGOUT"))})
 # USB 3 corridor between U2's row A and J2 (tools/route_usb.py routes it). SS TX caps under the TX
 # balls, the 4-channel ESD flow-through across all four SS lines, the D+/D- ESD to the left.

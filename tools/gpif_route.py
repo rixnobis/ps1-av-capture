@@ -25,7 +25,11 @@ G = 0.05
 NECK = (ESC_BOX[0] - SKIRT, ESC_BOX[1] - SKIRT, ESC_BOX[2] + SKIRT, ESC_BOX[3] + SKIRT)
 W_IN, CLR_IN, W_OUT, CLR_OUT = 0.1, 0.1, 0.127, 0.15
 VIA_R, VIA_COST = 0.225, 25.0
-VIA_KEEP = 2.0                      # mm around the series-resistor pads with no via
+GPIF_VIA_IN_NECK = __import__("os").environ.get("GPIF_VIA_IN_NECK", "1") == "1"
+EXIT_RESERVE = 0.8                 # mm reserved straight out of each escape end
+LAST_FAIL = [""]                    # why the last astar() returned None
+EXP_CAP = int(__import__("os").environ.get("GPIF_EXP_CAP", "400000"))   # A* node expansions per net
+VIA_KEEP = float(__import__("os").environ.get("GPIF_VIA_KEEP", "2.0"))                     # mm around the series-resistor pads with no via
 BUNDLE_BOX = (14.0, 17.0, 72.0, 58.0)
 LAYERS = [pcbnew.F_Cu, pcbnew.In2_Cu, pcbnew.B_Cu]
 NX = int(round((BUNDLE_BOX[2] - BUNDLE_BOX[0]) / G)) + 1
@@ -51,6 +55,7 @@ def main():
     netid = {}
     nid = lambda n: netid.setdefault(n, len(netid) + 1)  # noqa: E731
     owner = [np.zeros((NY, NX), dtype=np.int32) for _ in LAYERS]
+    VIA_PTS = []            # every via centre, board's and ours: hole-to-hole spacing
 
     def stamp(li, net, kind, g, ext):
         r = ext + CLR_OUT + W_OUT / 2 + 0.01
@@ -101,6 +106,7 @@ def main():
         n = t.GetNetname()
         if t.GetClass() == "PCB_VIA":
             xy = (mm(t.GetPosition().x) - OX, mm(t.GetPosition().y) - OY)
+            VIA_PTS.append(xy)
             for li in range(len(LAYERS)):
                 stamp(li, n, "circle", xy, mm(t.GetWidth(pcbnew.F_Cu)) / 2)
             continue
@@ -110,6 +116,8 @@ def main():
             if t.GetLayer() == L:
                 stamp(li, n, "seg", (a, b), mm(t.GetWidth()) / 2)
                 ends.setdefault(n, []).extend([(li, *a), (li, *b)])
+
+    n_board_vias = len(VIA_PTS)
 
     def cell(x, y):
         return int(round((y - BUNDLE_BOX[1]) / G)), int(round((x - BUNDLE_BOX[0]) / G))
@@ -131,7 +139,13 @@ def main():
                 if math.hypot(dj, di) * G <= VIA_R - W_OUT / 2 + G + 1e-6]   # + one cell: grid quantisation
 
     def via_ok(k, j, i):
-        if INNECK[j, i] or NOVIA[j, i]:
+        # vias are allowed in the neckdown skirt too: the B.Cu escapes on the west face meet
+        # the B.Cu decap column 1.5 mm out and can only leave by changing layer before it
+        if NOVIA[j, i] or (INNECK[j, i] and not GPIF_VIA_IN_NECK):
+            return False
+        # hole to hole: 0.2 mm drills 0.4 mm apart edge to edge (board rule), any net, own too
+        x, y = BUNDLE_BOX[0] + i * G, BUNDLE_BOX[1] + j * G
+        if any(math.dist((x, y), v) < 0.2 + 0.4 - 1e-6 for v in VIA_PTS):
             return False
         for lj in range(len(LAYERS)):
             o = owner[lj]
@@ -165,7 +179,8 @@ def main():
                 while came[path[-1]] is not None:
                     path.append(came[path[-1]])
                 return path[::-1]
-            if n_exp > 400000:
+            if n_exp > EXP_CAP:
+                LAST_FAIL[0] = f"cap hit after {n_exp} expansions"
                 return None
             li, j, i = c
             grid = owner[li]
@@ -192,6 +207,7 @@ def main():
                     if ng < best.get(n, 1e18):
                         best[n] = ng
                         heapq.heappush(openq, (ng + h(j, i), ng, n, c))
+        LAST_FAIL[0] = f"search space exhausted after {n_exp} expansions"
         return None
 
     jobs = []
@@ -212,12 +228,20 @@ def main():
     def lane(j):
         net, _, _, r = j
         cx, cy = (r[0] + r[2]) / 2, (r[1] + r[3]) / 2
-        if cx < 25.0:
-            return (2, cy)                 # sync column west of U1
         if cy > 34.0:
             return (0, -cx)                # row under U1: east first
         return (1, -cy)                    # R column east of U1: south first
     jobs.sort(key=lane)
+
+    # Every escape end sits on the escape-box edge next to its neighbours', so a net routed
+    # early can run straight across a later net's end and seal it in (measured: the nets that
+    # failed did so after ~600-2300 expansions, search space exhausted, not on the cap).
+    # Reserve each end's first EXIT_RESERVE mm straight out of the box for its own net.
+    for net, (sli, sx, sy), _, _ in jobs:
+        d = {abs(sx - ESC_BOX[0]): (-1, 0), abs(sx - ESC_BOX[2]): (1, 0),
+             abs(sy - ESC_BOX[1]): (0, -1), abs(sy - ESC_BOX[3]): (0, 1)}
+        ux, uy = d[min(d)]
+        stamp(sli, net, "seg", ((sx, sy), (sx + ux * EXIT_RESERVE, sy + uy * EXIT_RESERVE)), W_IN / 2)
 
     def line_ok(li, k, a, b):
         n = max(2, int(math.dist(a, b) / (G / 2)))
@@ -236,6 +260,7 @@ def main():
         return True
 
     def attempt(order):
+      del VIA_PTS[n_board_vias:]           # a second pass starts from the board's own vias
       done, failed, total = [], [], {}
       new_items = []
       for net, (sli, sx, sy), ref, rect in order:
@@ -248,9 +273,10 @@ def main():
                   if owner[0][jj, ii] in (0, k):
                       goal.add((0, jj, ii))
           sj, si = cell(sx, sy)
+          LAST_FAIL[0] = "no goal cell free" if not goal else ""
           path = astar(k, [(sli, sj, si)], goal) if goal else None
           if not path:
-              failed.append(f"{net} -> {ref}")
+              failed.append(f"{net} -> {ref}: {LAST_FAIL[0]}")
               continue
           # cells -> runs: break at direction change, layer change, and neck boundary
           pts = [path[0]]
@@ -283,6 +309,7 @@ def main():
                           changed = True
                           break
               if n_run:
+                  VIA_PTS.append(run[0])
                   new_items.append(("via", net, run[0]))
                   for lj in range(len(LAYERS)):
                       stamp(lj, net, "circle", run[0], VIA_R)
