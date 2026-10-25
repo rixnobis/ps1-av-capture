@@ -23,7 +23,7 @@ import numpy as np
 import pcbnew
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from route_usb import OX, OY, PCB  # noqa: E402
+from route_usb import OX, OY, PCB, footprints, tracks  # noqa: E402
 from bga_route import ESC_BOX, SKIRT  # noqa: E402
 
 G = 0.05
@@ -58,7 +58,8 @@ def in_neck(x, y):
 
 
 def main():
-    board = pcbnew.LoadBoard(str(PCB))
+    path = Path(sys.argv[sys.argv.index("--board") + 1]) if "--board" in sys.argv else PCB
+    board = pcbnew.LoadBoard(str(path))
     nets = board.GetNetsByName()
     netid = {}
     nid = lambda n: netid.setdefault(n, len(netid) + 1)  # noqa: E731
@@ -116,7 +117,7 @@ def main():
         prim_arr[li] = None
 
     pads = {}
-    for fp in board.GetFootprints():
+    for fp in footprints(board):
         for p in fp.Pads():
             net = p.GetNetname() or f"<nc {fp.GetReference()}.{p.GetNumber()}>"
             bb = p.GetBoundingBox()
@@ -132,7 +133,7 @@ def main():
     ends = {}            # net -> list of (layer index, x, y) track end points
     segs = {}            # net -> list of (layer index, a, b, track) existing tracks
     net_vias = {}        # net -> existing via centres
-    for t in board.GetTracks():
+    for t in tracks(board):
         n = t.GetNetname()
         if t.GetClass() == "PCB_VIA":
             xy = (mm(t.GetPosition().x) - OX, mm(t.GetPosition().y) - OY)
@@ -894,7 +895,7 @@ def main():
     if trimmed:
         print(f"  escape stubs trimmed back by {trimmed:.2f} mm in all")
     pcbnew.ZONE_FILLER(board).Fill(board.Zones())
-    board.Save(str(PCB))
+    board.Save(str(path))
     print(f"gpif_route: {len(done)} nets routed, {len(failed)} failed")
     for d in done:
         print("  ok", d)

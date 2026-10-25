@@ -14,7 +14,7 @@ from pathlib import Path
 import pcbnew
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from route_usb import OX, OY, PCB  # noqa: E402
+from route_usb import OX, OY, PCB, footprints, tracks  # noqa: E402
 
 VIA_D, VIA_DRILL, CLEAR, STUB = 0.45, 0.2, 0.15, 0.2
 ROWS = "ABCDEFGHJKL"
@@ -40,13 +40,13 @@ def main():
     for p in u2.Pads():
         circles.append((p.GetNetname(), mm(p.GetPosition().x) - OX, mm(p.GetPosition().y) - OY,
                         mm(p.GetSize().x) / 2))
-    for t in board.GetTracks():
+    for t in tracks(board):
         if t.GetClass() == "PCB_VIA":
             circles.append((t.GetNetname(), mm(t.GetPosition().x) - OX, mm(t.GetPosition().y) - OY,
                             mm(t.GetWidth(pcbnew.F_Cu)) / 2))
     segs = [(t.GetNetname(), (mm(t.GetStart().x) - OX, mm(t.GetStart().y) - OY),
              (mm(t.GetEnd().x) - OX, mm(t.GetEnd().y) - OY), mm(t.GetWidth()) / 2, t.GetLayer())
-            for t in board.GetTracks() if t.GetClass() == "PCB_TRACK"]
+            for t in tracks(board) if t.GetClass() == "PCB_TRACK"]
 
     def seg_dist(px, py, a, b):
         L2 = (b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2

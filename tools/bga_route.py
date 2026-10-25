@@ -20,7 +20,7 @@ import numpy as np
 import pcbnew
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from route_usb import OX, OY, PCB  # noqa: E402
+from route_usb import OX, OY, PCB, footprints, tracks  # noqa: E402
 from escape import ring, SKIP_NETS  # noqa: E402
 from build_pcb import POWER_NETS  # noqa: E402
 
@@ -91,7 +91,7 @@ def main():
         sub[hit & (sub == 0)] = k
         sub[hit & (sub != k) & (sub != 0)] = -1
 
-    for fp in board.GetFootprints():
+    for fp in footprints(board):
         for p in fp.Pads():
             net = p.GetNetname() or f"<nc {fp.GetReference()}.{p.GetNumber()}>"
             pos = p.GetPosition()
@@ -105,7 +105,7 @@ def main():
                     stamp(li, net, "rect", (mm(bb.GetLeft()) - OX, mm(bb.GetTop()) - OY,
                                             mm(bb.GetRight()) - OX, mm(bb.GetBottom()) - OY), 0.0)
     vias = {}
-    for t in board.GetTracks():
+    for t in tracks(board):
         if t.GetClass() == "PCB_VIA":
             xy = (mm(t.GetPosition().x) - OX, mm(t.GetPosition().y) - OY)
             vias.setdefault(t.GetNetname(), []).append(xy)

@@ -14,7 +14,24 @@ import pcbnew
 ROOT = Path(__file__).resolve().parent.parent
 PCB = ROOT / "ps1-av-capture.kicad_pcb"
 OX, OY = 100.0, 100.0
-W = 0.25                      # 90 ohm on L1/L2 and L4/L3, docs/stackup.md
+
+
+# KiCad saves footprints and tracks in UUID order and every build mints fresh UUIDs, so the
+# board's own iteration order changes from build to build; the stages that pick "the first"
+# candidate or route in arrival order iterate these instead.
+def footprints(board):
+    return sorted(board.GetFootprints(), key=lambda f: (f.GetReference(), f.GetPosition().x, f.GetPosition().y))
+
+
+def tracks(board):
+    def key(t):
+        s, e = t.GetStart(), t.GetEnd()
+        w = 0 if t.GetClass() == "PCB_VIA" else t.GetWidth()
+        return (t.GetClass(), t.GetNetname(), t.GetLayer(), s.x, s.y, e.x, e.y, w)
+    return sorted(board.GetTracks(), key=key)
+
+
+W = 0.25                     # 90 ohm on L1/L2 and L4/L3, docs/stackup.md
 F, B = pcbnew.F_Cu, pcbnew.B_Cu
 
 # Each path: list of (x, y) on one layer; pads it passes over are part of the polyline.

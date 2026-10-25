@@ -14,7 +14,7 @@ from pathlib import Path
 import pcbnew
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from route_usb import PLANES, OX, OY, PCB  # noqa: E402
+from route_usb import PLANES, OX, OY, PCB, footprints, tracks  # noqa: E402
 
 VIA_D, VIA_DRILL, CLEAR, STUB = 0.45, 0.2, 0.2, 0.25
 SKIP = {("U1", "101")}                     # TVP7002 exposed pad already carries its via grid
@@ -74,7 +74,7 @@ def main():
     nets = board.GetNetsByName()
     plane_nets = {n for _, n, _, _ in PLANES}
     obst = []          # (net, kind, geometry, half-width)
-    for fp in board.GetFootprints():
+    for fp in footprints(board):
         for p in fp.Pads():
             bb = p.GetBoundingBox()
             if p.GetShape() == pcbnew.PAD_SHAPE_CIRCLE:     # BGA balls: the bbox corner costs
@@ -86,7 +86,7 @@ def main():
                          (mm(bb.GetLeft()) - OX, mm(bb.GetTop()) - OY,
                           mm(bb.GetRight()) - OX, mm(bb.GetBottom()) - OY), 0.0))
     n_pad_obst = len(obst)
-    for t in board.GetTracks():
+    for t in tracks(board):
         if t.GetClass() == "PCB_VIA":
             obst.append((t.GetNetname(), "circle", (mm(t.GetPosition().x) - OX,
                          mm(t.GetPosition().y) - OY), mm(t.GetWidth(pcbnew.F_Cu)) / 2))
@@ -120,7 +120,7 @@ def main():
     # and counting balls here rejected every dogbone on its own ball (0.57 mm < 0.7 mm)
     vias = {g for _, k, g, _ in obst if k == "circle"} - {g for _, k, g, _ in obst[:n_pad_obst]}
     placed, failed, shared, served = 0, [], 0, []   # served: (net, pad or via centre) on the plane
-    for fp in board.GetFootprints():
+    for fp in footprints(board):
         ref = fp.GetReference()
         c = fp.GetPosition()
         cx, cy = mm(c.x) - OX, mm(c.y) - OY

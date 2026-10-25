@@ -28,7 +28,7 @@ import pcbnew
 from scipy import ndimage
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from route_usb import PCB, OX, OY, V3_CHANNELS  # noqa: E402
+from route_usb import PCB, OX, OY, V3_CHANNELS, footprints, tracks  # noqa: E402
 
 CHANNELS = [(min(x for x, _ in r) + OX, min(y for _, y in r) + OY,
              max(x for x, _ in r) + OX, max(y for _, y in r) + OY) for r in V3_CHANNELS]
@@ -368,7 +368,7 @@ def main():
     # ---- copper census ----
     own = {}           # net -> list of (layer index, ob, kind, item uuid)
     ends = set()       # (layer index, x nm, y nm) of every track end: no new segment starts there
-    for fp in board.GetFootprints():
+    for fp in footprints(board):
         for p in fp.Pads():
             n = p.GetNetname()
             k = nid(n) if n else 0
@@ -389,7 +389,7 @@ def main():
                     F.add(li, k, ob, pad=True)
                     if n:
                         own.setdefault(n, []).append((li, ob, "pad", p.m_Uuid.AsString()))
-    for t in board.GetTracks():
+    for t in tracks(board):
         n = t.GetNetname()
         k = nid(n)
         if t.GetClass() == "PCB_VIA":
@@ -414,8 +414,8 @@ def main():
 
     def clusters(net):
         """Island index per item uuid, from the board's connectivity."""
-        items = [p for fp in board.GetFootprints() for p in fp.Pads() if p.GetNetname() == net]
-        items += [t for t in board.GetTracks() if t.GetNetname() == net]
+        items = [p for fp in footprints(board) for p in fp.Pads() if p.GetNetname() == net]
+        items += [t for t in tracks(board) if t.GetNetname() == net]
         lab = {}
         nxt = 0
         for it in items:
@@ -848,7 +848,7 @@ def main():
             q = p.GetPosition()
             px, py = mm(q.x), mm(q.y)
             if any(t.GetNetname() == net and t.GetClass() == "PCB_TRACK" and
-                   (p.HitTest(t.GetStart()) or p.HitTest(t.GetEnd())) for t in board.GetTracks()):
+                   (p.HitTest(t.GetStart()) or p.HitTest(t.GetEnd())) for t in tracks(board)):
                 continue
             cands = sorted(((px + sx * 0.4, py + sy * 0.4) for sx in (1, -1) for sy in (1, -1)),
                            key=lambda v: -math.hypot(v[0] - cx, v[1] - cy))
