@@ -65,7 +65,11 @@ ORDER = [
     "+1V9A", "OSC_VDD", "+2V5", "VBUS", "VBUS_AUD", "+3V3_AUD", "SW_*",
     # crystals, I2C, the FSLC straps, the TVP7002 side of every 22R, reset/LED/PMODE
     "FX3_XI", "FX3_XO", "AUD_XI", "AUD_XO", "I2C_SDA", "I2C_SCL", "FX3_FSLC",
-    "TVP_DATACLK", "TVP_[RGB][2-9]", "TVP_FIDOUT", "TVP_VSOUT", "TVP_HSOUT", "TVP_SOGOUT",
+    # The four west FID..SOG nets share one tight escape south of U1's pin 22..25 column; a net
+    # routed first takes the lane and walls in the later ones (HSOUT's pin sealed otherwise). Route
+    # them innermost-corner first -- SOG, HS, VS, FID -- so each reaches its 22R before the next lays
+    # copper across the pin it needs.
+    "TVP_DATACLK", "TVP_[RGB][2-9]", "TVP_SOGOUT", "TVP_HSOUT", "TVP_VSOUT", "TVP_FIDOUT",
     "TVP_RESETn", "FX3_RESETn", "LED_*", "PWR_LED_K", "FX3_PMODE*",
 ]
 
