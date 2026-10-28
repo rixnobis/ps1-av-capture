@@ -37,7 +37,18 @@ def mm(v):
     return pcbnew.ToMM(v)
 
 
+# Per-net face overrides. VD_HS (ball K8) is a sync, so its 22R (R34) sits at the west end of
+# the B/G row, but its ball is in the G group's rows: leaving west it lands mid-bus on F.Cu
+# (between VD_VS and VD_G7, with the B.Cu syncs under it) and every G net peeling north to the
+# row has to cross it; with no via room in the 0.2 mm stubs the GPIF router could only get it
+# out on In2 across the +1V2 island and the L9 +3V3 channel. North it rises between L8 and L9
+# and leaves the island on F.Cu clear of the bundle.
+FACE = {"VD_HS": "N"}
+
+
 def face_for(net, x, y):
+    if net in FACE:
+        return FACE[net]
     if net.startswith("VD_R"):
         return "N"
     if net.startswith("VD_"):

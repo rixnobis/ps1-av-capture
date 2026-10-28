@@ -23,8 +23,9 @@ import numpy as np
 import pcbnew
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from route_usb import OX, OY, PCB, footprints, tracks  # noqa: E402
+from route_usb import OX, OY, PCB, PLANES, V3_CHANNELS, footprints, tracks  # noqa: E402
 from bga_route import ESC_BOX, SKIRT  # noqa: E402
+from build_pcb import SERIES  # noqa: E402
 
 G = 0.05
 NECK = (ESC_BOX[0] - SKIRT, ESC_BOX[1] - SKIRT, ESC_BOX[2] + SKIRT, ESC_BOX[3] + SKIRT)
@@ -37,6 +38,15 @@ LAST_FAIL = [""]                    # why the last astar() returned None
 EXP_CAP = int(__import__("os").environ.get("GPIF_EXP_CAP", "400000"))   # A* node expansions per net
 VIA_KEEP = float(__import__("os").environ.get("GPIF_VIA_KEEP", "2.0"))                     # mm around the series-resistor pads with no via
 BUNDLE_BOX = (14.0, 17.0, 72.0, 58.0)
+# Underpass: net -> (gate box where the +1V2 island keep-out does not apply to it, its
+# reserved via + In2 corridor, board mm), stamped for that net before anything routes. Empty:
+# the one tried, VD_HS from a via by its ball K8 on In2 under the L9 channel's end and out along
+# the H11 channel's north edge, [(60.3, 45.2), (60.0, 45.5), (60.0, 46.4), (56.4, 46.4),
+# (55.55, 47.25), (50.6, 47.25)] gated by (50.0, 47.15, 55.0, 47.5), routed it but walled the
+# island's north-west corner (C48) off between its In2 run and the L9 channel, cut two +1V2
+# balls off inside the escape box, and took the vias of the bus nets that cross it between
+# the decap columns (VD_B5, VD_B9 then failed).
+UNDERPASS = {}
 LAYERS = [pcbnew.F_Cu, pcbnew.In2_Cu, pcbnew.B_Cu]
 NX = int(round((BUNDLE_BOX[2] - BUNDLE_BOX[0]) / G)) + 1
 NY = int(round((BUNDLE_BOX[3] - BUNDLE_BOX[1]) / G)) + 1
@@ -181,6 +191,61 @@ def main():
                              np.maximum(np.maximum(rect[1] - Y, Y - rect[3]), 0))
                 NOVIA |= d < VIA_KEEP
 
+    # Keep-outs for the bundle's own copper: (layer index, polygon, exempt [(box, net or None)],
+    # vias too). In2 under the FX3 is the +1V2 island and the +3V3 channels to the VIO balls
+    # (route_usb.PLANES); bundle tracks across them on In2 cut the fill into fragments that
+    # strand the balls and the west decaps, so In2 is closed there outside the escape box (the
+    # escapes' own In2 stubs are inside it; vias are only holes in the plane). On F.Cu each
+    # TVP-side net needs its corridor from the U1 pin to its 22R pad 1 for p2p_route: no bundle
+    # track or via there.
+    KEEP = [(1, poly, [(ESC_BOX, None)] + [(box, n_) for n_, (box, _) in UNDERPASS.items()], False)
+            for L, n, _, poly in PLANES if L == pcbnew.In2_Cu and n == "+1V2"]
+    KEEP += [(1, poly, [], False) for poly in V3_CHANNELS]
+    for net in SERIES:
+        rs = [rect for r, rect, p in pads.get(net, []) if r == "U1" or (r.startswith("R") and p.IsOnLayer(pcbnew.F_Cu))]
+        if len(rs) == 2:
+            x0, y0 = min(r[0] for r in rs), min(r[1] for r in rs)
+            x1, y1 = max(r[2] for r in rs), max(r[3] for r in rs)
+            KEEP.append((0, ((x0, y0), (x1, y0), (x1, y1), (x0, y1)), [], True))
+    KEEP = [(kl, poly, ex, kv, (min(x for x, _ in poly), min(y for _, y in poly),
+                                max(x for x, _ in poly), max(y for _, y in poly)))
+            for kl, poly, ex, kv in KEEP]
+
+    def keep_hit(li, X, Y, r, vias=False, net=None):
+        """Points (arrays) on layer li within r of a keep-out (inside it or nearer its edge)."""
+        X, Y = np.asarray(X, dtype=float), np.asarray(Y, dtype=float)
+        hit = np.zeros(np.shape(X), dtype=bool)
+        rm = np.max(r)
+        bx0, by0, bx1, by1 = X.min() - rm, Y.min() - rm, X.max() + rm, Y.max() + rm
+        for kl, poly, ex, kv, bb in KEEP:
+            if kl != li or (vias and not kv):
+                continue
+            if bx0 > bb[2] or bx1 < bb[0] or by0 > bb[3] or by1 < bb[1]:
+                continue
+            inside = np.zeros(np.shape(X), dtype=bool)
+            d = np.full(np.shape(X), 1e9)
+            for (ax, ay), (bx2, by2) in zip(poly, poly[1:] + poly[:1]):
+                inside ^= ((ay > Y) != (by2 > Y)) & (X < (bx2 - ax) * (Y - ay) / ((by2 - ay) or 1e-12) + ax)
+                vx, vy = bx2 - ax, by2 - ay
+                t = np.clip(((X - ax) * vx + (Y - ay) * vy) / (vx * vx + vy * vy or 1e-12), 0, 1)
+                d = np.minimum(d, np.hypot(X - ax - t * vx, Y - ay - t * vy))
+            h = inside | (d < r)
+            for e, en in ex:
+                if en is None or en == net:
+                    h &= ~((X > e[0] - 1e-6) & (X < e[2] + 1e-6) & (Y > e[1] - 1e-6) & (Y < e[3] + 1e-6))
+            hit |= h
+        return hit
+
+    # Baked once into per-layer rasters (A* reads a cell; seg_ok tests a segment against them
+    # only where it comes near a keep-out at all): the shared one, and one per underpass net.
+    XG, YG = np.meshgrid(XS, YS)
+    BLOCK = [keep_hit(li, XG, YG, INFL - 1e-6) for li in range(len(LAYERS))]
+    NET_BLOCK = {nid(n_): [keep_hit(li, XG, YG, INFL - 1e-6, net=n_) for li in range(len(LAYERS))]
+                 for n_ in UNDERPASS}
+    NET_NAME = {nid(n_): n_ for n_ in UNDERPASS}
+    NOVIA |= keep_hit(0, XG, YG, VIA_R + CLR_OUT, vias=True)
+    KEEP_BB = [[bb for kl, _, _, _, bb in KEEP if kl == li] for li in range(len(LAYERS))]
+
     via_disk = [(dj, di) for dj in range(-6, 7) for di in range(-6, 7)
                 if math.hypot(dj, di) * G <= VIA_R - W_OUT / 2 + G + 1e-6]   # + one cell: grid quantisation
 
@@ -218,6 +283,8 @@ def main():
         steps = [(0, 1, 1), (0, -1, 1), (1, 0, 1), (-1, 0, 1),
                  (1, 1, 1.4142), (1, -1, 1.4142), (-1, 1, 1.4142), (-1, -1, 1.4142)]
         n_exp = 0
+        blk = NET_BLOCK.get(k, BLOCK)
+        vcache = {}         # (j, i) -> via_ok: the raster does not change during one search
         while openq:
             _, g, c, par = heapq.heappop(openq)
             if c in came:
@@ -238,7 +305,7 @@ def main():
                 nj, ni = j + dj, i + di
                 if not (0 <= nj < NY and 0 <= ni < NX) or grid[nj, ni] not in (0, k):
                     continue
-                if li == nobox and INBOX[nj, ni]:
+                if blk[li][nj, ni] or (li == nobox and INBOX[nj, ni]):
                     continue
                 if par is None and leads and c in leads and (
                         (di * leads[c][0] + dj * leads[c][1]) / cost < math.cos(math.pi / 4) - 1e-3):
@@ -253,8 +320,11 @@ def main():
                 if ng < best.get(n, 1e18):
                     best[n] = ng
                     heapq.heappush(openq, (ng + h(nj, ni), ng, n, c))
+            v_ok = vcache.get((j, i))
+            if v_ok is None:
+                v_ok = vcache[(j, i)] = via_ok(k, j, i)
             for lj in range(len(LAYERS)):
-                if lj != li and via_ok(k, j, i):
+                if lj != li and v_ok:
                     n = (lj, j, i)
                     ng = g + VIA_COST
                     if occ is not None:
@@ -320,6 +390,18 @@ def main():
              abs(sy - ESC_BOX[1]): (0, -1), abs(sy - ESC_BOX[3]): (0, 1)}
         ux, uy = d[min(d)]
         stamp(sli, net, "seg", ((sx, sy), (sx + ux * EXIT_RESERVE, sy + uy * EXIT_RESERVE)), W_IN / 2)
+    # and each underpass its via and In2 corridor (UNDERPASS above), before anyone routes
+    for net, (_, pts) in UNDERPASS.items():
+        if net not in {j[0] for j in jobs}:
+            continue
+        k = nid(net)
+        for li in range(len(LAYERS)):
+            j, i = cell(*pts[0])
+            if any(owner[li][j + dj, i + di] not in (0, k) for dj, di in via_disk):
+                print(f"  {net}: underpass via site taken on {LAYERS[li]}", flush=True)
+            stamp(li, net, "circle", pts[0], VIA_R)
+        for a_, b_ in zip(pts, pts[1:]):
+            stamp(1, net, "seg", (a_, b_), W_IN / 2)
 
     def start_tiers(net, sli, sx, sy):
         """Ways to start, tried in order; each is (starts, leads, nobox) for astar with
@@ -493,8 +575,16 @@ def main():
                     return False
         # width by the neckdown rule; clearance by the DRC's: a track that so much as touches
         # BGA_ESC (an end on its edge) gets the 0.1 mm against copper that is in it too
-        return clear_ok(li, k, a, b, W_IN if in_neck(*a) and in_neck(*b) else W_OUT,
-                        in_neck(*a) or in_neck(*b))
+        w = W_IN if in_neck(*a) and in_neck(*b) else W_OUT
+        rk = w / 2 + (CLR_IN if w == W_IN else CLR_OUT)
+        if any(min(a[0], b[0]) - rk < bb[2] and max(a[0], b[0]) + rk > bb[0]
+               and min(a[1], b[1]) - rk < bb[3] and max(a[1], b[1]) + rk > bb[1] for bb in KEEP_BB[li]):
+            n = max(2, int(math.dist(a, b) / (G / 4)))
+            t = np.arange(n + 1) / n
+            if keep_hit(li, a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, rk - 1e-6,
+                        net=NET_NAME.get(k)).any():
+                return False
+        return clear_ok(li, k, a, b, w, in_neck(*a) or in_neck(*b))
 
     def turn(u, v, w):
         """Direction change at v in degrees (0 = straight on); None if a leg is degenerate."""
