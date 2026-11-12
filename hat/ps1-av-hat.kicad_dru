@@ -1,0 +1,17 @@
+(version 1)
+
+# The FX3 escape box (rule area BGA_ESC, placed by tools/bga_route.py): 0.1 mm neckdown at
+# 0.1 mm clearance, so one track passes between two dogbone vias 0.8 mm apart.
+(rule "FX3 escape neckdown"
+  (condition "A.intersectsArea('BGA_ESC') && B.intersectsArea('BGA_ESC')")
+  (constraint clearance (min 0.1mm)))
+
+# Everywhere else: the 0.127 mm track floor, and the 0.15 mm netclass clearance (a matching custom
+# rule replaces the netclass value, so this one restates it rather than lowering it). Every value
+# carries its unit: kicad-cli 10.0.7 drops a rules file that fails to parse without a word.
+(rule "track floor outside the escape box"
+  (condition "A.Type == 'track' && !A.intersectsArea('BGA_ESC')")
+  (constraint track_width (min 0.127mm)))
+(rule "netclass clearance outside the escape box"
+  (condition "!A.intersectsArea('BGA_ESC') || !B.intersectsArea('BGA_ESC')")
+  (constraint clearance (min 0.15mm)))
