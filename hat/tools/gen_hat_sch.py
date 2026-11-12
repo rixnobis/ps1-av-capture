@@ -16,6 +16,46 @@ sys.path.insert(0, str(REPO / "tools"))
 import sch_lib as L  # noqa: E402
 
 L.PROJECT = "ps1-av-hat"
+
+# Deterministic UUIDs: sch_lib.uid() is random; override it at runtime with uuid5 over a stable key
+# (sheet name + ref + unit for symbols, sheet name + kind for the rest, plus a per-key counter).
+import uuid as _uuid
+_NS = _uuid.UUID("2f0c7a54-9b1e-4d36-8a77-5c1d0e9b4a10")
+_ctx = ["lib"]
+_cnt = {}
+
+
+def _det_uid():
+    k = _ctx[-1]
+    _cnt[k] = _cnt.get(k, 0) + 1
+    return str(_uuid.uuid5(_NS, f"{k}#{_cnt[k]}"))
+
+
+def _with_ctx(fn, keyf):
+    def wrapper(self, *a, **kw):
+        _ctx.append(keyf(self, *a, **kw))
+        try:
+            return fn(self, *a, **kw)
+        finally:
+            _ctx.pop()
+    return wrapper
+
+
+L.uid = _det_uid
+_orig_init = L.Sheet.__init__
+
+
+def _init(self, name, *a, **kw):
+    _ctx.append(f"sheet:{name}")
+    try:
+        _orig_init(self, name, *a, **kw)
+    finally:
+        _ctx.pop()
+
+
+L.Sheet.__init__ = _init
+L.Sheet.place = _with_ctx(L.Sheet.place, lambda self, sym, ref, value, x, y, nets, unit=1, **kw: f"{self.name}:{ref}:u{unit}")
+L.Sheet.text = _with_ctx(L.Sheet.text, lambda self, *a, **kw: f"{self.name}:text")
 ROOT = HAT                      # sheets are written next to ps1-av-hat.kicad_pro
 PINS = REPO / "tools" / "pins"  # TVP7002 / PCM2903C pin tables are shared with the FX3 design
 ROOT_UUID = "7b1d4e86-3a52-4c9f-8d07-1e5a9b3c6f22"

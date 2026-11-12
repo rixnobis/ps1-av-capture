@@ -221,6 +221,7 @@ def in_outline(box, e=EDGE):
 
 
 def main():
+    pcbnew.KIID.SeedGenerator(1)  # deterministic board item UUIDs
     comps, pads = read_netlist()
     board = pcbnew.NewBoard(str(PCB))
     board.SetCopperLayerCount(4)
