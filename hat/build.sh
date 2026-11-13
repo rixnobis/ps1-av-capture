@@ -47,9 +47,10 @@ python3 tools/join_hat.py ps1-av-hat.kicad_pcb --rounds 2 --cut 2> >(grep -v "sw
 python3 tools/route_hat.py trim 2> >(grep -v "swig/python detected" >&2)     # dangling ends and duplicates the joins left
 python3 tools/route_hat.py refill 2> >(grep -v "swig/python detected" >&2)
 python3 tools/tidy_geometry.py 2> >(grep -v "swig/python detected" >&2)   # geometry tidy post-pass: overlaps, jogs, 135 degree snaps, chamfers, necks (DRC-gated, bisected)
+python3 tools/route_hat.py refill 2> >(grep -v "swig/python detected" >&2)   # tidy moves copper, so the committed pours are refilled after it
 kicad-cli pcb drc --format report --severity-all --schematic-parity --refill-zones -o build/drc.rpt ps1-av-hat.kicad_pcb >/dev/null
 grep -E "^\*\* Found" build/drc.rpt
-kicad-cli pcb drc --format report --severity-error --schematic-parity --refill-zones --exit-code-violations \
+kicad-cli pcb drc --format report --severity-error --schematic-parity --exit-code-violations \
   -o build/drc-errors.rpt ps1-av-hat.kicad_pcb >/dev/null || { echo "DRC errors or unconnected items: see build/drc.rpt"; DRC_FAIL=1; }
 # check_geometry.py exits 1 on any finding; Freerouting output always has some (pin-exit necks, 90 degree
 # corners at pads, jogs), so the build gates on the findings that break copper (dangling ends, zero-length
