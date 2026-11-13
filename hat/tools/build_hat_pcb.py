@@ -104,10 +104,12 @@ FIXED = {
     "L1": (-65.0, 84.0, 0),
     "U3": (-56.0, 82.5, 0), "U4": (-56.0, 89.0, 0),     # 1V9 LDOs
     "U5": (-48.5, 86.0, 0),                              # 3V3A LDO
+    "C40": (-67.0, 80.8, 0),                             # buck input cap 2: out of the SW node corridor U2.2 -> L1.1
+    "TP1": (-64.4, 79.9, 0), "TP2": (-61.9, 79.9, 0), "TP3": (-59.4, 79.9, 0),   # MCU test points along the J4 side
 }
 FIXED.update({k: (*v, 0) for k, v in HOLES.items()})
 # Series 22R (U1 side = pad 1): single row under U1's south pins, ordered by the U1 pad x
-SERIES_Y_OFF = 9.8
+SERIES_Y_OFF = 10.9
 SERIES_PITCH = 1.05
 
 
@@ -239,6 +241,13 @@ def main():
         if c["fields"].get("LCSC"):
             fp.SetField("LCSC", c["fields"]["LCSC"])
             fp.GetField("LCSC").SetVisible(False)
+        for fname, fval in c["fields"].items():     # schematic fields the footprint must carry (parity)
+            if fname in ("Footprint", "Datasheet", "Description", "LCSC") or not fval:
+                continue
+            fp.SetField(fname, fval)
+            fp.GetField(fname).SetVisible(False)
+        if ref.startswith("TP"):     # in the schematic BOM; the library test point pad is excluded by default
+            fp.SetAttributes(fp.GetAttributes() & ~pcbnew.FP_EXCLUDE_FROM_BOM)
         if c["dnp"]:
             fp.SetDNP(True)
         for pad in fp.Pads():
@@ -278,7 +287,7 @@ def main():
         boxes[r] = body
     for r in HOLES:
         put(r, *FIXED[r][:2], 0, margin=0.3)
-    for r in ("U1", "J1", "J3", "U7", "U8", "U2", "L1", "U3", "U4", "U5"):
+    for r in ("U1", "J1", "J3", "U7", "U8", "U2", "L1", "U3", "U4", "U5", "C40", "TP1", "TP2", "TP3"):
         put(r, *FIXED[r], ring=0.1 if r == "U1" else 0.0)
     for r, (x, y, a) in FIXED.items():
         assert in_outline(boxes[r], 0.0) or r in HOLES or r in ("J4", "J5") or r == "J3", ("outside outline", r, boxes[r])

@@ -306,11 +306,30 @@
         "line_style": 0,
         "microvia_diameter": 0.3,
         "microvia_drill": 0.1,
-        "name": "GPIF",
+        "name": "Analog",
         "pcb_color": "rgba(0, 0, 0, 0.000)",
-        "priority": 1,
+        "priority": 4,
         "schematic_color": "rgba(0, 0, 0, 0.000)",
-        "track_width": 0.127,
+        "track_width": 0.2,
+        "tuning_profile": "",
+        "via_diameter": 0.45,
+        "via_drill": 0.2,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.15,
+        "diff_pair_gap": 0.15,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.25,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "Bus",
+        "pcb_color": "rgba(0, 0, 0, 0.000)",
+        "priority": 5,
+        "schematic_color": "rgba(0, 0, 0, 0.000)",
+        "track_width": 0.15,
         "tuning_profile": "",
         "via_diameter": 0.45,
         "via_drill": 0.2,
@@ -327,9 +346,9 @@
         "microvia_drill": 0.1,
         "name": "Plane",
         "pcb_color": "rgba(0, 0, 0, 0.000)",
-        "priority": 0,
+        "priority": 6,
         "schematic_color": "rgba(0, 0, 0, 0.000)",
-        "track_width": 0.25,
+        "track_width": 0.4,
         "tuning_profile": "",
         "via_diameter": 0.45,
         "via_drill": 0.2,
@@ -346,9 +365,28 @@
         "microvia_drill": 0.1,
         "name": "Power",
         "pcb_color": "rgba(0, 0, 0, 0.000)",
-        "priority": 1,
+        "priority": 3,
         "schematic_color": "rgba(0, 0, 0, 0.000)",
-        "track_width": 0.5,
+        "track_width": 0.4,
+        "tuning_profile": "",
+        "via_diameter": 0.45,
+        "via_drill": 0.2,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.15,
+        "diff_pair_gap": 0.15,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.25,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "PowerHi",
+        "pcb_color": "rgba(0, 0, 0, 0.000)",
+        "priority": 2,
+        "schematic_color": "rgba(0, 0, 0, 0.000)",
+        "track_width": 0.6,
         "tuning_profile": "",
         "via_diameter": 0.45,
         "via_drill": 0.2,
@@ -365,7 +403,7 @@
         "microvia_drill": 0.1,
         "name": "USB",
         "pcb_color": "rgba(0, 0, 0, 0.000)",
-        "priority": 0,
+        "priority": 1,
         "schematic_color": "rgba(0, 0, 0, 0.000)",
         "track_width": 0.25,
         "tuning_profile": "",
@@ -382,47 +420,35 @@
     "netclass_patterns": [
       {
         "netclass": "USB",
-        "pattern": "USB3_TXP*"
+        "pattern": "AUD_DP"
       },
       {
         "netclass": "USB",
-        "pattern": "USB3_TXN*"
+        "pattern": "AUD_DM"
       },
       {
         "netclass": "USB",
-        "pattern": "USB3_RXP"
+        "pattern": "AUD_DP_C"
       },
       {
         "netclass": "USB",
-        "pattern": "USB3_RXN"
+        "pattern": "AUD_DM_C"
       },
       {
-        "netclass": "USB",
-        "pattern": "USB3_DP"
+        "netclass": "PowerHi",
+        "pattern": "+5V"
       },
       {
-        "netclass": "USB",
-        "pattern": "USB3_DM"
+        "netclass": "PowerHi",
+        "pattern": "SW_2V5"
       },
       {
-        "netclass": "USB",
-        "pattern": "AUD_DP*"
-      },
-      {
-        "netclass": "USB",
-        "pattern": "AUD_DM*"
+        "netclass": "PowerHi",
+        "pattern": "+2V5"
       },
       {
         "netclass": "Power",
-        "pattern": "VBUS"
-      },
-      {
-        "netclass": "Power",
-        "pattern": "VBUS_AUD"
-      },
-      {
-        "netclass": "Power",
-        "pattern": "+3V3A"
+        "pattern": "+3V3"
       },
       {
         "netclass": "Power",
@@ -430,11 +456,7 @@
       },
       {
         "netclass": "Power",
-        "pattern": "+2V5"
-      },
-      {
-        "netclass": "Power",
-        "pattern": "+1V9*"
+        "pattern": "+3V3A"
       },
       {
         "netclass": "Power",
@@ -446,38 +468,62 @@
       },
       {
         "netclass": "Power",
-        "pattern": "FX3_AVDD"
+        "pattern": "+1V9A"
       },
       {
         "netclass": "Power",
-        "pattern": "FX3_U3*"
-      },
-      {
-        "netclass": "Power",
-        "pattern": "FX3_CVDDQ"
-      },
-      {
-        "netclass": "Power",
-        "pattern": "SW_*"
+        "pattern": "+1V9D"
       },
       {
         "netclass": "Power",
         "pattern": "OSC_VDD"
       },
       {
+        "netclass": "Power",
+        "pattern": "VBUS_AUD"
+      },
+      {
         "netclass": "Plane",
         "pattern": "GND"
       },
       {
-        "netclass": "Plane",
-        "pattern": "+3V3"
+        "netclass": "Analog",
+        "pattern": "TVP_RIN*"
       },
       {
-        "netclass": "Plane",
-        "pattern": "+1V2"
+        "netclass": "Analog",
+        "pattern": "TVP_GIN*"
       },
       {
-        "netclass": "GPIF",
+        "netclass": "Analog",
+        "pattern": "TVP_BIN*"
+      },
+      {
+        "netclass": "Analog",
+        "pattern": "TVP_SOGIN*"
+      },
+      {
+        "netclass": "Analog",
+        "pattern": "TVP_FILT*"
+      },
+      {
+        "netclass": "Analog",
+        "pattern": "TVP_PLLF"
+      },
+      {
+        "netclass": "Analog",
+        "pattern": "AIN_*"
+      },
+      {
+        "netclass": "Analog",
+        "pattern": "VIN_*"
+      },
+      {
+        "netclass": "Analog",
+        "pattern": "AUD_VIN*"
+      },
+      {
+        "netclass": "Bus",
         "pattern": "VD_*"
       }
     ]
