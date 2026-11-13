@@ -46,6 +46,7 @@ python3 tools/route_hat.py trim 2> >(grep -v "swig/python detected" >&2)     # d
 python3 tools/join_hat.py ps1-av-hat.kicad_pcb --rounds 2 --cut 2> >(grep -v "swig/python detected" >&2)   # what the trim exposed
 python3 tools/route_hat.py trim 2> >(grep -v "swig/python detected" >&2)     # dangling ends and duplicates the joins left
 python3 tools/route_hat.py refill 2> >(grep -v "swig/python detected" >&2)
+python3 tools/tidy_geometry.py 2> >(grep -v "swig/python detected" >&2)   # geometry tidy post-pass: overlaps, jogs, 135 degree snaps, chamfers, necks (DRC-gated, bisected)
 kicad-cli pcb drc --format report --severity-all --schematic-parity --refill-zones -o build/drc.rpt ps1-av-hat.kicad_pcb >/dev/null
 grep -E "^\*\* Found" build/drc.rpt
 kicad-cli pcb drc --format report --severity-error --schematic-parity --refill-zones --exit-code-violations \
