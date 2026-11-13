@@ -23,7 +23,7 @@ fi
 # Freerouting is NOT deterministic (thread timing), so the routed board differs from run to run and the
 # build gates on DRC (0 errors, 0 unconnected, 0 parity) + check_geometry.py + the In1 plane check,
 # never on a fixed result. The jar is fetched once into FREEROUTING_JAR's directory if it is missing.
-FR_JAR="${FREEROUTING_JAR:-/storage/fleet-tmp/rix/hat-work/fr/freerouting.jar}"
+FR_JAR="${FREEROUTING_JAR:-build/freerouting-2.5.0.jar}"
 FR_ROUNDS="${FREEROUTING_ROUNDS:-3}"     # round n+1 starts from the board round n left
 if [ ! -f "$FR_JAR" ]; then
   mkdir -p "$(dirname "$FR_JAR")"
